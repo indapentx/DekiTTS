@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Deki TTS</title>
-    <link rel="icon" href="shortcut.png"/>
+    <title>Anki Audio Generator for ElevenLabs</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js"></script>
@@ -303,9 +302,7 @@
             const currentItem = allRows[currentRowIndex];
             const numSentences = currentItem.sentences.length;
             
-            // **UPDATED NAMING LOGIC**
             let numSuffix = '';
-            // Add a number suffix only if there's more than one sentence AND it's not the first one.
             if (numSentences > 1 && currentSentenceIndex > 0) {
                 numSuffix = (currentSentenceIndex + 1).toString();
             }
@@ -330,10 +327,21 @@
 
         function handleSkip() {
             const currentItem = allRows[currentRowIndex];
-            updateStatus(`Skipped word: ${currentItem.word}`, 'info');
-            // Skip all sentences for the current word
-            currentRowIndex++;
-            currentSentenceIndex = 0;
+            const numSentences = currentItem.sentences.length;
+
+            // Check if there are more sentences for the current word
+            if (currentSentenceIndex < numSentences - 1) {
+                // If yes, just move to the next sentence
+                currentSentenceIndex++;
+                updateStatus(`Skipped to next sentence`, 'info');
+            } else {
+                // If it's the last sentence, move to the next word
+                currentRowIndex++;
+                currentSentenceIndex = 0;
+                updateStatus(`Skipped to next word`, 'info');
+            }
+            
+            // Reset the UI for the new item
             updateUIForCurrentItem();
         }
         
