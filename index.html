@@ -242,8 +242,6 @@
         async function processGeneration(isRegen) {
             let payload;
 
-            // NOTE: Free regeneration is not available via the standard API.
-            // Every "regenerate" click will be a new, paid request.
             const textToGenerate = (processingMode === 'word') 
                 ? allRows[currentRowIndex].word 
                 : allRows[currentRowIndex].sentences[currentSentenceIndex];
@@ -254,10 +252,10 @@
                 "text": textToGenerate,
                 "model_id": "eleven_v3",
                 "voice_settings": { 
-                    "stability": 0.5,
-                    "similarity_boost": 0.75, 
+                    "stability": 1.0, // **UPDATED: Set to max for consistency**
+                    "similarity_boost": 0.88, // **UPDATED: Minor boost for consistency**
                     "style": 0.0,
-                    "use_speaker_boost": true // **UPDATED: Speaker boost is now enabled**
+                    "use_speaker_boost": true
                 }
             };
             
