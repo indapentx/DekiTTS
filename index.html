@@ -53,7 +53,7 @@
         <!-- Header -->
         <div class="text-center">
             <h1 class="text-3xl md:text-4xl font-bold text-white">Anki Audio Generator</h1>
-            <p class="text-gray-400 mt-2">Generate TTS for your flashcard words & sentences using ElevenLabs v3.</p>
+            <p class="text-gray-400 mt-2">Generate TTS for your flashcard sentences using ElevenLabs v3.</p>
         </div>
 
         <!-- Configuration Section -->
@@ -87,11 +87,11 @@
             <!-- Current Item -->
             <div class="bg-gray-900/50 p-6 rounded-xl border border-gray-700 text-center space-y-4">
                 <div>
-                    <p id="currentItemLabel" class="text-sm text-gray-400">Current Item</p>
+                    <p class="text-sm text-gray-400">Current Word</p>
                     <h2 id="currentWord" class="text-2xl font-bold text-indigo-400">-</h2>
                 </div>
                 <div>
-                    <p class="text-sm text-gray-400">Text to Generate</p>
+                    <p class="text-sm text-gray-400">Sentence to Generate</p>
                     <p id="currentText" class="text-lg font-medium text-gray-100">-</p>
                 </div>
                 <audio id="audioPlayer" controls class="w-full mt-4 hidden"></audio>
@@ -127,7 +127,6 @@
         const progressCounter = document.getElementById('progressCounter');
         const progressBar = document.getElementById('progressBar');
         const statusLog = document.getElementById('statusLog');
-        const currentItemLabel = document.getElementById('currentItemLabel');
         const currentWordEl = document.getElementById('currentWord');
         const currentTextEl = document.getElementById('currentText');
         const audioPlayer = document.getElementById('audioPlayer');
@@ -142,9 +141,7 @@
         let allRows = [];
         let currentRowIndex = 0;
         let currentSentenceIndex = 0;
-        let processingMode = 'word'; // 'word' or 'sentence'
         let lastGeneratedBlob = null;
-        let lastRequestPayload = null;
         const approvedAudioBlobs = new Map();
 
         // --- Event Listeners ---
@@ -197,9 +194,11 @@
                 if (columns.length >= 4) {
                     const germanWord = columns[1].trim();
                     const sentencesRaw = columns[3].trim();
-                    if (germanWord) {
-                        const sentences = sentencesRaw ? sentencesRaw.split('<br>').map(s => s.trim()).filter(Boolean) : [];
-                        allRows.push({ word: germanWord, sentences });
+                    if (germanWord && sentencesRaw) { // Ensure there is a word and at least one sentence
+                        const sentences = sentencesRaw.split('<br>').map(s => s.trim()).filter(Boolean);
+                        if (sentences.length > 0) {
+                           allRows.push({ word: germanWord, sentences });
+                        }
                     }
                 }
             });
@@ -215,45 +214,31 @@
             }
 
             const currentItem = allRows[currentRowIndex];
-            currentWordEl.textContent = currentItem.word;
-
-            if (processingMode === 'word') {
-                currentItemLabel.textContent = "Current Item (Word)";
-                currentTextEl.textContent = currentItem.word;
-            } else { // processingMode === 'sentence'
-                if (currentItem.sentences.length > 0) {
-                    currentItemLabel.textContent = `Current Item (Sentence ${currentSentenceIndex + 1}/${currentItem.sentences.length})`;
-                    currentTextEl.textContent = currentItem.sentences[currentSentenceIndex];
-                } else {
-                    handleSkip();
-                    return;
-                }
+            let wordDisplay = currentItem.word;
+            if (currentItem.sentences.length > 1) {
+                wordDisplay += ` (${currentSentenceIndex + 1}/${currentItem.sentences.length})`;
             }
+            currentWordEl.textContent = wordDisplay;
+            currentTextEl.textContent = currentItem.sentences[currentSentenceIndex];
             
             audioPlayer.classList.add('hidden');
             audioPlayer.src = '';
             lastGeneratedBlob = null;
-            lastRequestPayload = null;
 
             updateButtons(false);
             updateProgress();
         }
 
         async function processGeneration(isRegen) {
-            let payload;
-
-            const textToGenerate = (processingMode === 'word') 
-                ? allRows[currentRowIndex].word 
-                : allRows[currentRowIndex].sentences[currentSentenceIndex];
-
+            const textToGenerate = allRows[currentRowIndex].sentences[currentSentenceIndex];
             if (!textToGenerate) return;
 
-            payload = {
+            const payload = {
                 "text": textToGenerate,
                 "model_id": "eleven_v3",
                 "voice_settings": { 
-                    "stability": 1.0, // **UPDATED: Set to max for consistency**
-                    "similarity_boost": 0.88, // **UPDATED: Minor boost for consistency**
+                    "stability": 1.0,
+                    "similarity_boost": 0.88,
                     "style": 0.0,
                     "use_speaker_boost": true
                 }
@@ -295,18 +280,13 @@
 
         function handleApprove() {
             const currentItem = allRows[currentRowIndex];
-            let filename = '';
-
-            if (processingMode === 'word') {
-                filename = `${currentItem.word}.mp3`;
-            } else {
-                const numSentences = currentItem.sentences.length;
-                let numSuffix = '';
-                if (numSentences > 1 && currentSentenceIndex > 0) {
-                    numSuffix = (currentSentenceIndex + 1).toString();
-                }
-                filename = `s_${currentItem.word}${numSuffix}.mp3`;
+            const numSentences = currentItem.sentences.length;
+            
+            let numSuffix = '';
+            if (numSentences > 1 && currentSentenceIndex > 0) {
+                numSuffix = (currentSentenceIndex + 1).toString();
             }
+            const filename = `s_${currentItem.word}${numSuffix}.mp3`;
 
             if (lastGeneratedBlob) {
                 approvedAudioBlobs.set(filename, lastGeneratedBlob);
@@ -316,47 +296,21 @@
                 downloadZipBtn.classList.remove('btn-disabled');
             }
 
-            // --- Transition to the next state ---
-            if (processingMode === 'word') {
-                if (currentItem.sentences.length > 0) {
-                    processingMode = 'sentence';
-                } else {
-                    currentRowIndex++;
-                    processingMode = 'word';
-                }
-            } else {
-                currentSentenceIndex++;
-                if (currentSentenceIndex >= currentItem.sentences.length) {
-                    currentRowIndex++;
-                    currentSentenceIndex = 0;
-                    processingMode = 'word';
-                }
-            }
-            updateUIForCurrentItem();
+            // Move to the next sentence or word
+            moveToNextItem();
         }
 
         function handleSkip() {
-             const currentItem = allRows[currentRowIndex];
+            updateStatus(`Skipped sentence`, 'info');
+            moveToNextItem();
+        }
 
-            if (processingMode === 'word') {
-                 if (currentItem.sentences.length > 0) {
-                    processingMode = 'sentence';
-                    updateStatus(`Skipped word audio, moving to sentence.`, 'info');
-                } else {
-                    currentRowIndex++;
-                    processingMode = 'word';
-                    updateStatus(`Skipped word, moving to next card.`, 'info');
-                }
-            } else { // processingMode === 'sentence'
-                if (currentSentenceIndex < currentItem.sentences.length - 1) {
-                    currentSentenceIndex++;
-                    updateStatus(`Skipped to next sentence`, 'info');
-                } else {
-                    currentRowIndex++;
-                    currentSentenceIndex = 0;
-                    processingMode = 'word';
-                    updateStatus(`Skipped to next word`, 'info');
-                }
+        function moveToNextItem() {
+            const currentItem = allRows[currentRowIndex];
+            currentSentenceIndex++;
+            if (currentSentenceIndex >= currentItem.sentences.length) {
+                currentRowIndex++;
+                currentSentenceIndex = 0;
             }
             updateUIForCurrentItem();
         }
