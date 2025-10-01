@@ -53,7 +53,7 @@
         <!-- Header -->
         <div class="text-center">
             <h1 class="text-3xl md:text-4xl font-bold text-white">Anki Audio Generator</h1>
-            <p class="text-gray-400 mt-2">Generate TTS for your flashcard sentences using ElevenLabs v3.</p>
+            <p class="text-gray-400 mt-2">Generate TTS for your flashcard sentences using Eleven Multilingual v2.</p>
         </div>
 
         <!-- Configuration Section -->
@@ -235,12 +235,13 @@
 
             const payload = {
                 "text": textToGenerate,
-                "model_id": "eleven_v3",
+                "model_id": "eleven_multilingual_v2",
                 "voice_settings": { 
-                    "stability": 1.0,
-                    "similarity_boost": 0.88,
+                    "stability": 0.5,
+                    "similarity_boost": 0.75,
                     "style": 0.0,
-                    "use_speaker_boost": true
+                    "use_speaker_boost": true,
+                    "speed": 0.80
                 }
             };
             
