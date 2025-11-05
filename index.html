@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html lang="en" class="dark">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Deki TTS</title>
-    <link rel="icon" href="shortcut.png"/>
+    <link rel="icon" href="shortcut.png" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js"></script>
@@ -13,21 +14,30 @@
         body {
             font-family: 'Inter', sans-serif;
         }
+
         .btn-disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
+
         .spinner {
-            border-top-color: #4f46e5; /* indigo-600 */
+            border-top-color: #4f46e5;
+            /* indigo-600 */
             animation: spin 1s linear infinite;
         }
+
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
+
         /* Style for the audio player in dark mode */
         audio::-webkit-media-controls-panel {
-            background-color: #374151; /* gray-700 */
+            background-color: #374151;
+            /* gray-700 */
         }
+
         audio::-webkit-media-controls-play-button,
         audio::-webkit-media-controls-current-time-display,
         audio::-webkit-media-controls-time-remaining-display,
@@ -36,6 +46,7 @@
         audio::-webkit-media-controls-fullscreen-button {
             filter: invert(1);
         }
+
         kbd {
             background-color: #374151;
             border-radius: 3px;
@@ -46,10 +57,11 @@
         }
     </style>
 </head>
+
 <body class="bg-gray-900 text-gray-300 flex items-center justify-center min-h-screen p-4">
 
     <div class="w-full max-w-4xl bg-gray-800 rounded-2xl shadow-2xl border border-gray-700 p-6 md:p-8 space-y-6">
-        
+
         <!-- Header -->
         <div class="text-center">
             <h1 class="text-3xl md:text-4xl font-bold text-white">Anki Audio Generator</h1>
@@ -58,13 +70,49 @@
 
         <!-- Configuration Section -->
         <div class="p-6 bg-gray-900/50 rounded-xl border border-gray-700">
-             <div class="text-center">
-                <label for="fileInput" class="block text-sm font-medium text-gray-400 mb-2">1. Select your Anki Export File (.txt)</label>
-                <input type="file" id="fileInput" accept=".txt" class="w-full max-w-sm mx-auto text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:font-semibold file:bg-indigo-500/10 file:text-indigo-400 hover:file:bg-indigo-500/20 file:border-gray-600">
+            <div class="text-center">
+                <label for="fileInput" class="block text-sm font-medium text-gray-400 mb-2">1. Select your Anki Export
+                    File (.txt or .tsv)</label>
+                <input type="file" id="fileInput" accept=".txt,.tsv,text/plain,text/tab-separated-values"
+                    class="w-full max-w-sm mx-auto text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:font-semibold file:bg-indigo-500/10 file:text-indigo-400 hover:file:bg-indigo-500/20 file:border-gray-600">
             </div>
-            <div class="text-center mt-4">
-                 <label class="block text-sm font-medium text-gray-400 mb-2">2. Start the Process</label>
-                <button id="loadFileBtn" class="w-full max-w-sm mx-auto bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-105">
+            <div class="mt-4">
+                <div class="text-center">
+                    <span class="block text-sm font-medium text-gray-400 mb-2">2. Choose a Voice Mode</span>
+                    <p class="text-xs text-gray-500">Pick a mode below and adjust the ElevenLabs voice IDs if needed.
+                    </p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex items-start space-x-3 bg-gray-900/60 p-4 rounded-lg border border-gray-700">
+                        <input type="radio" name="voiceMode" id="voiceModeA" value="voiceA"
+                            class="mt-1.5 h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500" checked>
+                        <div class="flex-1 text-left">
+                            <label for="voiceModeA" class="text-sm font-semibold text-gray-200">Deutsch</label>
+                            <p class="text-xs text-gray-400 mb-2">Default German voice used so far.</p>
+                            <label for="voiceAId" class="sr-only">Deutsch voice ID</label>
+                            <input type="text" id="voiceAId"
+                                class="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                placeholder="Enter ElevenLabs voice ID" value="FOfJ2PMgU6HOGbNYnzto">
+                        </div>
+                    </div>
+                    <div class="flex items-start space-x-3 bg-gray-900/60 p-4 rounded-lg border border-gray-700">
+                        <input type="radio" name="voiceMode" id="voiceModeB" value="voiceB"
+                            class="mt-1.5 h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500">
+                        <div class="flex-1 text-left">
+                            <label for="voiceModeB" class="text-sm font-semibold text-gray-200">Englisch</label>
+                            <p class="text-xs text-gray-400 mb-2">Use this when you want the English voice.</p>
+                            <label for="voiceBId" class="sr-only">Englisch voice ID</label>
+                            <input type="text" id="voiceBId"
+                                class="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                placeholder="Enter ElevenLabs voice ID" value="umKoJK6tP1ALjO0zo1EE">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="text-center mt-6">
+                <label class="block text-sm font-medium text-gray-400 mb-2">3. Start the Process</label>
+                <button id="loadFileBtn"
+                    class="w-full max-w-sm mx-auto bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-105">
                     Load File & Start
                 </button>
             </div>
@@ -99,15 +147,23 @@
 
             <!-- Action Buttons -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <button id="generateBtn" class="bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform transform hover:scale-105">Generate<kbd>G</kbd></button>
-                <button id="regenerateBtn" class="bg-yellow-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-transform transform hover:scale-105 btn-disabled" disabled>Regenerate<kbd>R</kbd></button>
-                <button id="approveBtn" class="bg-green-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-transform transform hover:scale-105 btn-disabled" disabled>Approve<kbd>A</kbd></button>
-                <button id="skipBtn" class="bg-red-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-transform transform hover:scale-105">Skip<kbd>S</kbd></button>
+                <button id="generateBtn"
+                    class="bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform transform hover:scale-105">Generate<kbd>G</kbd></button>
+                <button id="regenerateBtn"
+                    class="bg-yellow-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-transform transform hover:scale-105 btn-disabled"
+                    disabled>Regenerate<kbd>R</kbd></button>
+                <button id="approveBtn"
+                    class="bg-green-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-transform transform hover:scale-105 btn-disabled"
+                    disabled>Approve<kbd>A</kbd></button>
+                <button id="skipBtn"
+                    class="bg-red-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-transform transform hover:scale-105">Skip<kbd>S</kbd></button>
             </div>
-            
+
             <!-- Download Section -->
             <div class="text-center pt-4">
-                 <button id="downloadZipBtn" class="w-full md:w-1/2 bg-gray-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-transform transform hover:scale-105 btn-disabled" disabled>
+                <button id="downloadZipBtn"
+                    class="w-full md:w-1/2 bg-gray-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-transform transform hover:scale-105 btn-disabled"
+                    disabled>
                     Download All Approved as ZIP (<span id="zipCount">0</span> files)
                 </button>
             </div>
@@ -117,11 +173,12 @@
 
     <script>
         // --- Hardcoded User Settings ---
-        const API_KEY = "sk_59b678c8e94929340d6c1f1785840f98a8338ad2644b0ae6";
-        const VOICE_ID = "FOfJ2PMgU6HOGbNYnzto";
+        const API_KEY = "sk_ddfc786e0ce60cca7d9f45fc969f156f683595a7c729f632";
 
         // DOM Elements
         const fileInput = document.getElementById('fileInput');
+        const voiceAIdInput = document.getElementById('voiceAId');
+        const voiceBIdInput = document.getElementById('voiceBId');
         const loadFileBtn = document.getElementById('loadFileBtn');
         const workspace = document.getElementById('workspace');
         const progressCounter = document.getElementById('progressCounter');
@@ -165,6 +222,15 @@
             }
         }
 
+        function getSelectedVoiceId() {
+            const selectedRadio = document.querySelector('input[name="voiceMode"]:checked');
+            const selectedMode = selectedRadio ? selectedRadio.value : 'voiceA';
+            const voiceId = selectedMode === 'voiceB'
+                ? voiceBIdInput.value.trim()
+                : voiceAIdInput.value.trim();
+            return voiceId;
+        }
+
         function handleFileLoad() {
             const file = fileInput.files[0];
             if (!file) {
@@ -197,7 +263,7 @@
                     if (germanWord && sentencesRaw) { // Ensure there is a word and at least one sentence
                         const sentences = sentencesRaw.split('<br>').map(s => s.trim()).filter(Boolean);
                         if (sentences.length > 0) {
-                           allRows.push({ word: germanWord, sentences });
+                            allRows.push({ word: germanWord, sentences });
                         }
                     }
                 }
@@ -220,7 +286,7 @@
             }
             currentWordEl.textContent = wordDisplay;
             currentTextEl.textContent = currentItem.sentences[currentSentenceIndex];
-            
+
             audioPlayer.classList.add('hidden');
             audioPlayer.src = '';
             lastGeneratedBlob = null;
@@ -233,10 +299,16 @@
             const textToGenerate = allRows[currentRowIndex].sentences[currentSentenceIndex];
             if (!textToGenerate) return;
 
+            const voiceId = getSelectedVoiceId();
+            if (!voiceId) {
+                updateStatus('Please provide a voice ID for the selected voice mode.', 'error');
+                return;
+            }
+
             const payload = {
                 "text": textToGenerate,
                 "model_id": "eleven_multilingual_v2",
-                "voice_settings": { 
+                "voice_settings": {
                     "stability": 0.5,
                     "similarity_boost": 0.75,
                     "style": 0.0,
@@ -244,11 +316,11 @@
                     "speed": 0.80
                 }
             };
-            
+
             updateStatus(isRegen ? 'Regenerating audio...' : 'Generating audio...', 'loading');
             setLoadingState(true);
 
-            const TTS_URL = `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`;
+            const TTS_URL = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
             const headers = {
                 "Accept": "audio/mpeg",
                 "Content-Type": "application/json",
@@ -282,7 +354,7 @@
         function handleApprove() {
             const currentItem = allRows[currentRowIndex];
             const numSentences = currentItem.sentences.length;
-            
+
             let numSuffix = '';
             if (numSentences > 1 && currentSentenceIndex > 0) {
                 numSuffix = (currentSentenceIndex + 1).toString();
@@ -315,7 +387,7 @@
             }
             updateUIForCurrentItem();
         }
-        
+
         async function downloadZip() {
             if (approvedAudioBlobs.size === 0) {
                 updateStatus('No approved audio files to download.', 'error');
@@ -353,7 +425,7 @@
             approveBtn.disabled = !isGenerated;
             approveBtn.classList.toggle('btn-disabled', !isGenerated);
         }
-        
+
         function disableAllActionButtons() {
             [generateBtn, regenerateBtn, approveBtn, skipBtn].forEach(btn => {
                 btn.disabled = true;
@@ -380,4 +452,5 @@
         }
     </script>
 </body>
+
 </html>
