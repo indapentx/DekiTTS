@@ -334,6 +334,15 @@
             return `${key.slice(0, visible)}...${key.slice(-visible)}`;
         }
 
+        function sanitizeFilenamePart(value) {
+            if (!value) return 'entry';
+            const cleaned = value
+                .replace(/[^A-Za-z0-9 _-]/g, '')
+                .trim()
+                .replace(/\s+/g, '_');
+            return cleaned || 'entry';
+        }
+
         // --- Generation Helpers ---
 
         function getContentLength(item) {
@@ -891,9 +900,17 @@
             if (contentLength > 1 && currentSentenceIndex > 0) {
                 numSuffix = (currentSentenceIndex + 1).toString();
             }
-            const prefix = generationMode === 'words' ? 'w' : 's';
-            const baseName = currentItem.word || `entry_${currentRowIndex + 1}`;
-            const filename = `${prefix}_${baseName}${numSuffix}.mp3`;
+            const rawBaseName = currentItem.word || `entry_${currentRowIndex + 1}`;
+            const sanitizedBase = sanitizeFilenamePart(rawBaseName);
+
+            let filenameBase;
+            if (generationMode === 'words') {
+                filenameBase = sanitizedBase;
+            } else {
+                filenameBase = `s_${sanitizedBase}${numSuffix}`;
+            }
+
+            const filename = `${filenameBase}.mp3`;
 
             if (lastGeneratedBlob) {
                 approvedAudioBlobs.set(filename, lastGeneratedBlob);
