@@ -79,8 +79,7 @@
             <div class="mt-4">
                 <div class="text-center">
                     <span class="block text-sm font-medium text-gray-400 mb-2">2. Choose a Voice Mode</span>
-                    <p class="text-xs text-gray-500">Pick a mode below and adjust the ElevenLabs voice IDs if needed.
-                    </p>
+                    <p class="text-xs text-gray-500">Pick a mode below. Voice IDs are fixed for each language.</p>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="flex items-start space-x-3 bg-gray-900/60 p-4 rounded-lg border border-gray-700">
@@ -89,10 +88,9 @@
                         <div class="flex-1 text-left">
                             <label for="voiceModeA" class="text-sm font-semibold text-gray-200">Deutsch</label>
                             <p class="text-xs text-gray-400 mb-2">Default German voice used so far.</p>
-                            <label for="voiceAId" class="sr-only">Deutsch voice ID</label>
-                            <input type="text" id="voiceAId"
-                                class="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                placeholder="Enter ElevenLabs voice ID" value="FOfJ2PMgU6HOGbNYnzto">
+                            <p class="text-xs text-gray-500">Voice ID:
+                                <span class="font-mono text-gray-400">FOfJ2PMgU6HOGbNYnzto</span>
+                            </p>
                         </div>
                     </div>
                     <div class="flex items-start space-x-3 bg-gray-900/60 p-4 rounded-lg border border-gray-700">
@@ -101,10 +99,9 @@
                         <div class="flex-1 text-left">
                             <label for="voiceModeB" class="text-sm font-semibold text-gray-200">Englisch</label>
                             <p class="text-xs text-gray-400 mb-2">Use this when you want the English voice.</p>
-                            <label for="voiceBId" class="sr-only">Englisch voice ID</label>
-                            <input type="text" id="voiceBId"
-                                class="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                placeholder="Enter ElevenLabs voice ID" value="umKoJK6tP1ALjO0zo1EE">
+                            <p class="text-xs text-gray-500">Voice ID:
+                                <span class="font-mono text-gray-400">7K7gQtvEtXdCK2jdldgu</span>
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -174,11 +171,13 @@
     <script>
         // --- Hardcoded User Settings ---
         const API_KEY = "sk_ddfc786e0ce60cca7d9f45fc969f156f683595a7c729f632";
+        const VOICE_IDS = {
+            voiceA: "FOfJ2PMgU6HOGbNYnzto",
+            voiceB: "7K7gQtvEtXdCK2jdldgu"
+        };
 
         // DOM Elements
         const fileInput = document.getElementById('fileInput');
-        const voiceAIdInput = document.getElementById('voiceAId');
-        const voiceBIdInput = document.getElementById('voiceBId');
         const loadFileBtn = document.getElementById('loadFileBtn');
         const workspace = document.getElementById('workspace');
         const progressCounter = document.getElementById('progressCounter');
@@ -225,10 +224,7 @@
         function getSelectedVoiceId() {
             const selectedRadio = document.querySelector('input[name="voiceMode"]:checked');
             const selectedMode = selectedRadio ? selectedRadio.value : 'voiceA';
-            const voiceId = selectedMode === 'voiceB'
-                ? voiceBIdInput.value.trim()
-                : voiceAIdInput.value.trim();
-            return voiceId;
+            return VOICE_IDS[selectedMode] || VOICE_IDS.voiceA;
         }
 
         function handleFileLoad() {
@@ -301,7 +297,7 @@
 
             const voiceId = getSelectedVoiceId();
             if (!voiceId) {
-                updateStatus('Please provide a voice ID for the selected voice mode.', 'error');
+                updateStatus('Voice ID missing for the selected voice mode.', 'error');
                 return;
             }
 
