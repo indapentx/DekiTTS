@@ -74,7 +74,7 @@
             <div class="text-center">
                 <label for="fileInput" class="block text-sm font-medium text-gray-400 mb-2">1. Select your Anki Export
                     File (.txt or .tsv)</label>
-                <input type="file" id="fileInput" accept=".txt,.tsv,text/plain,text/tab-separated-values"
+                <input type="file" id="fileInput" accept=".txt,.tsv,text/plain,text/tab-separated-values" multiple
                     class="w-full max-w-sm mx-auto text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:font-semibold file:bg-indigo-500/10 file:text-indigo-400 hover:file:bg-indigo-500/20 file:border-gray-600">
             </div>
             <div class="mt-4">
@@ -726,55 +726,75 @@
             }
         }
 
-        function handleFileLoad() {
-            const file = fileInput.files[0];
-            if (!file) {
+        function readFileAsText(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (event) => resolve(event.target.result);
+                reader.onerror = () => reject(new Error(`Failed to read ${file.name}.`));
+                reader.readAsText(file, 'UTF-8');
+            });
+        }
+
+        async function handleFileLoad() {
+            const files = Array.from(fileInput.files || []);
+            if (files.length === 0) {
                 updateStatus('Please select a file to load.', 'error');
                 return;
             }
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const content = e.target.result;
-                parseFileContent(content);
-                currentRowIndex = 0;
-                currentSentenceIndex = 0;
-                lastGeneratedBlob = null;
-                setLoadingState(false);
-                updateButtons(false);
-                audioPlayer.classList.add('hidden');
-                audioPlayer.src = '';
 
-                approvedAudioBlobs.clear();
-                zipCount.textContent = approvedAudioBlobs.size;
-                downloadZipBtn.disabled = true;
-                downloadZipBtn.classList.add('btn-disabled');
+            updateStatus(files.length === 1 ? 'Loading file...' : `Loading ${files.length} files...`, 'loading');
 
-                if (allRows.length === 0) {
-                    workspace.classList.add('hidden');
-                    updateStatus('File is empty or could not be parsed.', 'error');
-                    updateProgress();
-                    return;
-                }
+            let combinedRows = [];
+            try {
+                const contents = await Promise.all(files.map(readFileAsText));
+                combinedRows = contents.flatMap(parseFileContent);
+            } catch (error) {
+                console.error(error);
+                updateStatus(error.message || 'Failed to read the selected files.', 'error');
+                return;
+            }
 
-                ensureValidPosition();
-                workspace.classList.remove('hidden');
-                updateUIForCurrentItem();
+            allRows = combinedRows;
+            currentRowIndex = 0;
+            currentSentenceIndex = 0;
+            lastGeneratedBlob = null;
+            setLoadingState(false);
+            updateButtons(false);
+            audioPlayer.classList.add('hidden');
+            audioPlayer.src = '';
 
-                const totalItems = getTotalItems();
-                if (totalItems > 0) {
-                    updateStatus('File loaded. Ready to generate.', 'success');
-                } else {
-                    const infoMessage = generationMode === 'words'
-                        ? 'File loaded, but no vocabulary terms were detected in the second column.'
-                        : 'File loaded, but no example sentences were detected in the fourth column.';
-                    updateStatus(infoMessage, 'info');
-                }
-            };
-            reader.readAsText(file, 'UTF-8');
+            approvedAudioBlobs.clear();
+            zipCount.textContent = approvedAudioBlobs.size;
+            downloadZipBtn.disabled = true;
+            downloadZipBtn.classList.add('btn-disabled');
+
+            if (allRows.length === 0) {
+                workspace.classList.add('hidden');
+                updateStatus('File is empty or could not be parsed.', 'error');
+                updateProgress();
+                return;
+            }
+
+            ensureValidPosition();
+            workspace.classList.remove('hidden');
+            updateUIForCurrentItem();
+
+            const totalItems = getTotalItems();
+            if (totalItems > 0) {
+                const successMessage = files.length === 1
+                    ? 'File loaded. Ready to generate.'
+                    : `${files.length} files loaded. Ready to generate.`;
+                updateStatus(successMessage, 'success');
+            } else {
+                const infoMessage = generationMode === 'words'
+                    ? 'File loaded, but no vocabulary terms were detected in the second column.'
+                    : 'File loaded, but no example sentences were detected in the fourth column.';
+                updateStatus(infoMessage, 'info');
+            }
         }
 
         function parseFileContent(content) {
-            allRows = [];
+            const rows = [];
             const lines = content.split('\n');
             lines.forEach(line => {
                 const columns = line.split('\t');
@@ -786,8 +806,9 @@
                     ? sentencesRaw.split('<br>').map(s => s.trim()).filter(Boolean)
                     : [];
                 if (!germanWord) return;
-                allRows.push({ word: germanWord, sentences });
+                rows.push({ word: germanWord, sentences });
             });
+            return rows;
         }
 
         function updateUIForCurrentItem() {
