@@ -101,7 +101,7 @@
                             <label for="voiceModeB" class="text-sm font-semibold text-gray-200">Englisch</label>
                             <p class="text-xs text-gray-400 mb-2">Use this when you want the English voice.</p>
                             <p class="text-xs text-gray-500">Voice ID:
-                                <span class="font-mono text-gray-400">cgSgspJ2msm6clMCkdW9</span>
+                                <span class="font-mono text-gray-400">XrExE9yKIg1WjnnlVkGX</span>
                             </p>
                         </div>
                     </div>
@@ -264,7 +264,7 @@
         ];
         const VOICE_IDS = {
             voiceA: "FOfJ2PMgU6HOGbNYnzto",
-            voiceB: "cgSgspJ2msm6clMCkdW9"
+            voiceB: "XrExE9yKIg1WjnnlVkGX"
         };
         const DEFAULT_TTS_MODEL_ID = 'eleven_multilingual_v2';
 
@@ -897,6 +897,7 @@
                 return;
             }
 
+            const speedSetting = generationMode === 'sentences' ? 0.80 : 0.70;
             const payload = {
                 "text": textToGenerate,
                 "model_id": getSelectedModelId(),
@@ -905,7 +906,7 @@
                     "similarity_boost": 0.75,
                     "style": 0.0,
                     "use_speaker_boost": true,
-                    "speed": 0.70
+                    "speed": speedSetting
                 }
             };
 
