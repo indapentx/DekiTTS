@@ -243,23 +243,33 @@
         const API_ACCOUNTS = [
             {
                 id: 'account-1',
-                name: 'Account 1',
+                name: 'Howard',
+                email: 'suitor_jollier9k@icloud.com',
                 apiKey: 'sk_ddfc786e0ce60cca7d9f45fc969f156f683595a7c729f632'
             },
             {
                 id: 'account-2',
-                name: 'Account 2',
+                name: 'Jesse',
+                email: 'salsas-beleuchtet75@icloud.com',
                 apiKey: 'sk_6f322f7ed4274e779096fec1fdc987d4995657938247a143'
             },
             {
                 id: 'account-3',
-                name: 'Account 3',
+                name: 'Hank',
+                email: 'collars_indigo4j@icloud.com',
                 apiKey: 'sk_9123fb529a0006c6629635626837afa1326a976018e07b35'
             },
             {
                 id: 'account-4',
-                name: 'Account 4',
+                name: 'Nacho',
+                email: 'fauna.gustier3x@icloud.com',
                 apiKey: 'sk_fce14447c3c5e8cda274009f0e2f2d8d712f0161e47decf2'
+            },
+            {
+                id: 'account-5',
+                name: 'Saul',
+                email: 'zehntel.idyll.5m@icloud.com',
+                apiKey: 'sk_012257205d1797a530d95f36e26b5707932e8942055ddfa2'
             }
         ];
         const VOICE_IDS = {
@@ -483,6 +493,10 @@
 
                 textContainer.appendChild(nameEl);
                 textContainer.appendChild(keyEl);
+                const emailEl = document.createElement('p');
+                emailEl.className = 'text-xs text-gray-500';
+                emailEl.textContent = account.email ? `Email: ${account.email}` : 'Email not provided.';
+                textContainer.appendChild(emailEl);
 
                 left.appendChild(radio);
                 left.appendChild(textContainer);
