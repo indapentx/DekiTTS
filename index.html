@@ -1007,7 +1007,7 @@
             }
 
             const contentType = getContentType(currentItem, currentSentenceIndex);
-            const speedSetting = contentType === 'sentence' ? 0.80 : 0.70;
+            const speedSetting = contentType === 'sentence' ? 0.80 : 1;
             const payload = {
                 "text": textToGenerate,
                 "model_id": getSelectedModelId(),
