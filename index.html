@@ -474,6 +474,12 @@
             return sentences[index] || '';
         }
 
+        function ensureTrailingPeriodForWord(text) {
+            const normalized = (text || '').trim();
+            if (!normalized) return '';
+            return /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
+        }
+
         function getTotalItems() {
             if (!Array.isArray(allRows) || allRows.length === 0) return 0;
             return allRows.reduce((sum, row) => sum + getContentLength(row), 0);
@@ -1007,9 +1013,12 @@
             }
 
             const contentType = getContentType(currentItem, currentSentenceIndex);
+            const textForApi = contentType === 'word'
+                ? ensureTrailingPeriodForWord(textToGenerate)
+                : textToGenerate;
             const speedSetting = contentType === 'sentence' ? 0.80 : 1;
             const payload = {
-                "text": textToGenerate,
+                "text": textForApi,
                 "model_id": getSelectedModelId(),
                 "voice_settings": {
                     "stability": 0.5,
