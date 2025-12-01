@@ -210,6 +210,22 @@
                 <div id="statusLog" class="text-center text-sm text-gray-400 h-5"></div>
             </div>
 
+            <!-- Credit Estimate -->
+            <div class="bg-gray-900/50 p-4 rounded-xl border border-gray-700">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div>
+                        <p class="text-sm font-semibold text-gray-200">Credit Estimate</p>
+                        <p class="text-xs text-gray-400">Remaining items in the current mode.</p>
+                    </div>
+                    <div class="text-right space-y-1">
+                        <p id="creditTotal" class="text-xl font-bold text-indigo-400">0</p>
+                        <p id="creditBreakdown" class="text-xs text-gray-500">0 words · 0 sentences</p>
+                        <p id="creditBalanceHint" class="text-xs text-gray-500">Select an account to compare balance.</p>
+                        <p id="creditCardHint" class="text-xs text-gray-500">0 of 0 cards coverable (est.).</p>
+                    </div>
+                </div>
+            </div>
+
             <!-- Current Item -->
             <div class="bg-gray-900/50 p-6 rounded-xl border border-gray-700 text-center space-y-4">
                 <div>
@@ -235,6 +251,21 @@
                     disabled>Approve<kbd>A</kbd></button>
                 <button id="skipBtn"
                     class="bg-red-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-transform transform hover:scale-105">Skip<kbd>S</kbd></button>
+            </div>
+
+            <!-- Auto Generation -->
+            <div class="bg-gray-900/50 p-4 rounded-xl border border-gray-700">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div>
+                        <p class="text-sm font-semibold text-gray-200">Optional: Generate Everything At Once</p>
+                        <p class="text-xs text-gray-400">Auto-generate and approve audio for every loaded card using the current mode.</p>
+                    </div>
+                    <button id="autoGenerateBtn"
+                        class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-105">
+                        Generate All (Auto)
+                    </button>
+                </div>
+                <p id="autoModeStatus" class="text-xs text-gray-500 mt-2">Uses your selected voice, model, and generation mode.</p>
             </div>
 
             <!-- Download Section -->
@@ -309,6 +340,12 @@
         const generationModeRadios = document.querySelectorAll('input[name="generationMode"]');
         const accountListEl = document.getElementById('accountList');
         const accountMessageEl = document.getElementById('accountMessage');
+        const autoGenerateBtn = document.getElementById('autoGenerateBtn');
+        const autoModeStatusEl = document.getElementById('autoModeStatus');
+        const creditTotalEl = document.getElementById('creditTotal');
+        const creditBreakdownEl = document.getElementById('creditBreakdown');
+        const creditBalanceHintEl = document.getElementById('creditBalanceHint');
+        const creditCardHintEl = document.getElementById('creditCardHint');
 
         // App State
         let allRows = [];
@@ -318,9 +355,14 @@
         let generationMode = 'sentences';
         const approvedAudioBlobs = new Map();
         const BALANCE_REFRESH_INTERVAL_MS = 60000;
+        const AUTO_GENERATE_DELAY_MS = 300;
+        const CREDIT_COST_CARD = 60;
+        const CREDIT_COST_WORD = 10;
+        const CREDIT_COST_SENTENCE = 50;
         let balanceRefreshTimerId = null;
         const accountElements = new Map();
         let selectedAccountId = null;
+        let isAutoGenerating = false;
 
         // --- Event Listeners ---
         loadFileBtn.addEventListener('click', handleFileLoad);
@@ -330,9 +372,12 @@
         skipBtn.addEventListener('click', handleSkip);
         downloadZipBtn.addEventListener('click', downloadZip);
         document.addEventListener('keydown', handleKeyPress);
+        autoGenerateBtn.addEventListener('click', handleAutoGenerateAll);
         generationModeRadios.forEach(radio => {
             radio.addEventListener('change', handleGenerationModeChange);
         });
+
+        const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
         // --- Account Management ---
 
@@ -403,6 +448,43 @@
         function getSentenceList(item) {
             if (!item) return [];
             return Array.isArray(item.sentences) ? item.sentences : [];
+        }
+
+        function computePendingCreditCounts() {
+            const counts = { words: 0, sentences: 0 };
+            if (!Array.isArray(allRows) || allRows.length === 0) return counts;
+
+            for (let rowIndex = currentRowIndex; rowIndex < allRows.length; rowIndex++) {
+                const row = allRows[rowIndex];
+                const length = getContentLength(row);
+                if (length === 0) continue;
+
+                const startIndex = rowIndex === currentRowIndex ? currentSentenceIndex : 0;
+                for (let idx = startIndex; idx < length; idx++) {
+                    const type = getContentType(row, idx);
+                    if (type === 'word') {
+                        counts.words += 1;
+                    } else if (type === 'sentence') {
+                        counts.sentences += 1;
+                    }
+                }
+            }
+            return counts;
+        }
+
+        function computeRemainingCardCount() {
+            if (!Array.isArray(allRows) || allRows.length === 0) return 0;
+            let cards = 0;
+            for (let rowIndex = currentRowIndex; rowIndex < allRows.length; rowIndex++) {
+                const row = allRows[rowIndex];
+                const length = getContentLength(row);
+                if (length === 0) continue;
+                const startIndex = rowIndex === currentRowIndex ? currentSentenceIndex : 0;
+                if (startIndex < length) {
+                    cards += 1;
+                }
+            }
+            return cards;
         }
 
         function getContentType(item, index = 0) {
@@ -594,7 +676,7 @@
                     accountListEl.appendChild(wrapper);
                 }
 
-                accountElements.set(account.id, { radioEl: radio, remainingEl, statusEl, wrapperEl: wrapper, account });
+                accountElements.set(account.id, { radioEl: radio, remainingEl, statusEl, wrapperEl: wrapper, account, remainingValue: null });
 
                 radio.addEventListener('change', () => {
                     if (radio.checked) {
@@ -641,6 +723,7 @@
                     wrapperEl.classList.toggle('shadow-lg', isSelected);
                 }
             });
+            updateCreditEstimate();
         }
 
         function getSelectedAccount() {
@@ -658,6 +741,7 @@
             if (!account.apiKey) {
                 remainingEl.textContent = '--';
                 statusEl.textContent = 'No API key configured.';
+                elements.remainingValue = null;
                 return;
             }
 
@@ -727,14 +811,20 @@
                 if (remaining !== undefined) {
                     remainingEl.textContent = formatNumber(remaining);
                     statusEl.textContent = combinedStatus || updateText;
+                    elements.remainingValue = remaining;
                 } else {
                     remainingEl.textContent = '--';
                     statusEl.textContent = ['Balance format unexpected.', combinedStatus].filter(Boolean).join(' ');
+                    elements.remainingValue = null;
                 }
             } catch (error) {
                 const message = error && error.message ? error.message : 'Unknown error';
                 remainingEl.textContent = '--';
                 statusEl.textContent = `Could not load balance (${message}).`;
+                elements.remainingValue = null;
+            }
+            if (account.id === selectedAccountId) {
+                updateCreditEstimate();
             }
         }
 
@@ -793,7 +883,7 @@
 
             ensureValidPosition();
             updateUIForCurrentItem();
-
+            updateCreditEstimate();
             if (!Array.isArray(allRows) || allRows.length === 0) {
                 return;
             }
@@ -863,6 +953,7 @@
             zipCount.textContent = approvedAudioBlobs.size;
             downloadZipBtn.disabled = true;
             downloadZipBtn.classList.add('btn-disabled');
+            updateCreditEstimate();
 
             if (allRows.length === 0) {
                 workspace.classList.add('hidden');
@@ -937,6 +1028,7 @@
                 lastGeneratedBlob = null;
                 disableAllActionButtons();
                 updateProgress();
+                updateCreditEstimate();
                 return;
             }
 
@@ -951,6 +1043,7 @@
                 disableAllActionButtons();
                 updateStatus('Congratulations! You finished the list.', 'success');
                 updateProgress();
+                updateCreditEstimate();
                 return;
             }
 
@@ -974,42 +1067,64 @@
             audioPlayer.src = '';
             lastGeneratedBlob = null;
 
-            updateButtons(false);
-            skipBtn.disabled = false;
-            skipBtn.classList.remove('btn-disabled');
+            if (isAutoGenerating) {
+                disableAllActionButtons();
+            } else {
+                updateButtons(false);
+                skipBtn.disabled = false;
+                skipBtn.classList.remove('btn-disabled');
+            }
             updateProgress();
+            updateCreditEstimate();
         }
 
-        async function processGeneration(isRegen) {
+        async function processGeneration(isRegen, options = {}) {
+            const {
+                skipPlayback = false,
+                silentStatus = false,
+                manageLoadingState = true,
+                updateButtonState = true
+            } = options;
+
             ensureValidPosition();
             if (currentRowIndex >= allRows.length) {
-                updateStatus('No items available to generate.', 'error');
-                return;
+                if (!silentStatus) {
+                    updateStatus('No items available to generate.', 'error');
+                }
+                return false;
             }
 
             const currentItem = allRows[currentRowIndex];
             const rawText = getContentAt(currentItem, currentSentenceIndex);
             if (!rawText) {
-                updateStatus('No text available for this entry.', 'error');
-                return;
+                if (!silentStatus) {
+                    updateStatus('No text available for this entry.', 'error');
+                }
+                return false;
             }
 
             const textToGenerate = rawText.trim();
             if (!textToGenerate) {
-                updateStatus('Text is empty after trimming.', 'error');
-                return;
+                if (!silentStatus) {
+                    updateStatus('Text is empty after trimming.', 'error');
+                }
+                return false;
             }
 
             const voiceId = getSelectedVoiceId();
             if (!voiceId) {
-                updateStatus('Voice ID missing for the selected voice mode.', 'error');
-                return;
+                if (!silentStatus) {
+                    updateStatus('Voice ID missing for the selected voice mode.', 'error');
+                }
+                return false;
             }
 
             const activeAccount = getSelectedAccount();
             if (!activeAccount || !activeAccount.apiKey) {
-                updateStatus('Select an API account with a valid key before generating.', 'error');
-                return;
+                if (!silentStatus) {
+                    updateStatus('Select an API account with a valid key before generating.', 'error');
+                }
+                return false;
             }
 
             const contentType = getContentType(currentItem, currentSentenceIndex);
@@ -1029,8 +1144,12 @@
                 }
             };
 
-            updateStatus(isRegen ? 'Regenerating audio...' : 'Generating audio...', 'loading');
-            setLoadingState(true);
+            if (!silentStatus) {
+                updateStatus(isRegen ? 'Regenerating audio...' : 'Generating audio...', 'loading');
+            }
+            if (manageLoadingState) {
+                setLoadingState(true);
+            }
 
             const TTS_URL = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
             const headers = {
@@ -1046,34 +1165,61 @@
                     lastGeneratedBlob = blob;
                     const audioUrl = URL.createObjectURL(blob);
                     audioPlayer.src = audioUrl;
-                    audioPlayer.classList.remove('hidden');
-                    audioPlayer.play();
-                    updateStatus('Audio generated. Please review.', 'success');
-                    updateButtons(true);
+                    if (skipPlayback) {
+                        audioPlayer.classList.add('hidden');
+                    } else {
+                        audioPlayer.classList.remove('hidden');
+                    }
+                    if (!skipPlayback) {
+                        audioPlayer.play().catch(() => { /* ignore autoplay issues */ });
+                    }
+                    if (!silentStatus) {
+                        updateStatus('Audio generated. Please review.', 'success');
+                    }
+                    if (updateButtonState) {
+                        updateButtons(true);
+                    }
                     refreshAccountBalance(activeAccount, { silent: true });
+                    return true;
                 } else {
                     const errorData = await response.json();
                     const errorMessage = errorData.detail ? errorData.detail.message : 'An unknown API error occurred.';
-                    updateStatus(`Error: ${errorMessage}`, 'error');
-                    updateButtons(false);
+                    if (!silentStatus) {
+                        updateStatus(`Error: ${errorMessage}`, 'error');
+                    }
+                    if (updateButtonState) {
+                        updateButtons(false);
+                    }
+                    return false;
                 }
             } catch (error) {
-                updateStatus(`Network Error: ${error.message}`, 'error');
+                if (!silentStatus) {
+                    updateStatus(`Network Error: ${error.message}`, 'error');
+                }
+                return false;
             } finally {
-                setLoadingState(false);
+                if (manageLoadingState) {
+                    setLoadingState(false);
+                }
             }
         }
 
-        function handleApprove() {
+        function handleApprove(options = {}) {
+            const { silent = false } = options;
+
             if (currentRowIndex >= allRows.length) {
-                updateStatus('Nothing to approve.', 'error');
+                if (!silent) {
+                    updateStatus('Nothing to approve.', 'error');
+                }
                 return;
             }
 
             const currentItem = allRows[currentRowIndex];
             const textValue = getContentAt(currentItem, currentSentenceIndex);
             if (!textValue) {
-                updateStatus('Nothing to approve for this entry.', 'error');
+                if (!silent) {
+                    updateStatus('Nothing to approve for this entry.', 'error');
+                }
                 return;
             }
 
@@ -1094,11 +1240,13 @@
 
             if (lastGeneratedBlob) {
                 approvedAudioBlobs.set(filename, lastGeneratedBlob);
-                updateStatus(`Approved and saved: ${filename}`, 'success');
+                if (!silent) {
+                    updateStatus(`Approved and saved: ${filename}`, 'success');
+                }
                 zipCount.textContent = approvedAudioBlobs.size;
                 downloadZipBtn.disabled = false;
                 downloadZipBtn.classList.remove('btn-disabled');
-            } else {
+            } else if (!silent) {
                 updateStatus('Generate audio before approving.', 'error');
             }
 
@@ -1112,6 +1260,148 @@
             const label = contentType === 'sentence' ? 'sentence' : 'word';
             updateStatus(`Skipped ${label}`, 'info');
             moveToNextItem();
+        }
+
+        function setAutoGenerateButtonState(isRunning) {
+            if (!autoGenerateBtn) return;
+            autoGenerateBtn.textContent = isRunning ? 'Stop Auto Mode' : 'Generate All (Auto)';
+            autoGenerateBtn.classList.toggle('bg-pink-600', isRunning);
+            autoGenerateBtn.classList.toggle('hover:bg-pink-700', isRunning);
+            autoGenerateBtn.classList.toggle('bg-indigo-600', !isRunning);
+            autoGenerateBtn.classList.toggle('hover:bg-indigo-700', !isRunning);
+        }
+
+        function getSelectedAccountRemainingCredits() {
+            if (!selectedAccountId) return null;
+            const elements = accountElements.get(selectedAccountId);
+            if (!elements) return null;
+            const { remainingValue } = elements;
+            return typeof remainingValue === 'number' && !Number.isNaN(remainingValue) ? remainingValue : null;
+        }
+
+        function updateCreditEstimate() {
+            const counts = computePendingCreditCounts();
+            const totalCredits = counts.words * CREDIT_COST_WORD + counts.sentences * CREDIT_COST_SENTENCE;
+            const remainingCards = computeRemainingCardCount();
+
+            if (creditTotalEl) {
+                creditTotalEl.textContent = formatNumber(totalCredits);
+            }
+            if (creditBreakdownEl) {
+                creditBreakdownEl.textContent = `${counts.words} words @ ${CREDIT_COST_WORD} + ${counts.sentences} sentences @ ${CREDIT_COST_SENTENCE}`;
+            }
+
+            const remaining = getSelectedAccountRemainingCredits();
+            if (creditCardHintEl) {
+                if (remaining === null) {
+                    creditCardHintEl.textContent = `${remainingCards} cards remaining (est. ${CREDIT_COST_CARD} per card).`;
+                } else {
+                    const coverableCards = Math.floor(remaining / CREDIT_COST_CARD);
+                    creditCardHintEl.textContent = `Can cover ~${Math.min(coverableCards, remainingCards)} of ${remainingCards} cards (est. ${CREDIT_COST_CARD} per card).`;
+                }
+            }
+
+            if (!creditBalanceHintEl) return;
+
+            creditBalanceHintEl.classList.remove('text-green-400', 'text-red-400');
+            if (remaining === null) {
+                creditBalanceHintEl.textContent = 'Select an account to compare balance.';
+                return;
+            }
+
+            if (totalCredits === 0) {
+                creditBalanceHintEl.textContent = `Balance: ${formatNumber(remaining)} credits available.`;
+                return;
+            }
+
+            if (remaining >= totalCredits) {
+                creditBalanceHintEl.textContent = `Balance covers it: ${formatNumber(remaining)} available.`;
+                creditBalanceHintEl.classList.add('text-green-400');
+            } else {
+                const shortfall = totalCredits - remaining;
+                creditBalanceHintEl.textContent = `Short by ${formatNumber(shortfall)} (balance: ${formatNumber(remaining)}).`;
+                creditBalanceHintEl.classList.add('text-red-400');
+            }
+        }
+
+        function setManualButtonsLocked(locked) {
+            [generateBtn, regenerateBtn, approveBtn, skipBtn].forEach(btn => {
+                btn.disabled = locked;
+                btn.classList.toggle('btn-disabled', locked);
+            });
+        }
+
+        function setAutoModeMessage(message) {
+            if (autoModeStatusEl) {
+                autoModeStatusEl.textContent = message;
+            }
+        }
+
+        async function handleAutoGenerateAll() {
+            if (isAutoGenerating) {
+                isAutoGenerating = false;
+                setAutoModeMessage('Stopping auto mode after current item...');
+                updateStatus('Stopping auto generation...', 'info');
+                return;
+            }
+
+            if (getTotalItems() === 0) {
+                updateStatus('Load a file before auto generating.', 'error');
+                return;
+            }
+
+            const activeAccount = getSelectedAccount();
+            if (!activeAccount || !activeAccount.apiKey) {
+                updateStatus('Select an API account with a valid key before auto generating.', 'error');
+                return;
+            }
+
+            isAutoGenerating = true;
+            setAutoGenerateButtonState(true);
+            setAutoModeMessage('Auto mode running. You can stop anytime.');
+            setManualButtonsLocked(true);
+            ensureValidPosition();
+            updateUIForCurrentItem();
+            updateStatus('Auto generation started...', 'loading');
+
+            while (isAutoGenerating && currentRowIndex < allRows.length) {
+                const totalItems = getTotalItems();
+                const processed = getProcessedItemCount();
+                setAutoModeMessage(`Auto generating item ${Math.min(processed + 1, totalItems)} of ${totalItems}...`);
+                const currentItem = allRows[currentRowIndex];
+                const currentLabel = getContentAt(currentItem, currentSentenceIndex) || currentItem.word || `Entry ${currentRowIndex + 1}`;
+
+                const success = await processGeneration(false, {
+                    skipPlayback: true,
+                    silentStatus: true,
+                    manageLoadingState: false,
+                    updateButtonState: false
+                });
+
+                if (!isAutoGenerating) {
+                    break;
+                }
+
+                if (success && lastGeneratedBlob) {
+                    handleApprove({ silent: true });
+                } else {
+                    updateStatus(`Auto generation failed for "${currentLabel}". Skipping.`, 'error');
+                    moveToNextItem();
+                }
+
+                await sleep(AUTO_GENERATE_DELAY_MS);
+            }
+
+            const finished = currentRowIndex >= allRows.length;
+            isAutoGenerating = false;
+            setAutoGenerateButtonState(false);
+            setManualButtonsLocked(false);
+            updateUIForCurrentItem();
+            setAutoModeMessage(finished
+                ? 'Auto generation finished. Download the ZIP when ready.'
+                : 'Auto mode stopped.');
+            updateStatus(finished ? 'Auto generation complete.' : 'Auto generation stopped.', finished ? 'success' : 'info');
+            updateCreditEstimate();
         }
 
         function moveToNextItem() {
