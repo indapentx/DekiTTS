@@ -356,9 +356,9 @@
         const approvedAudioBlobs = new Map();
         const BALANCE_REFRESH_INTERVAL_MS = 60000;
         const AUTO_GENERATE_DELAY_MS = 300;
-        const CREDIT_COST_CARD = 60;
+        const CREDIT_COST_CARD = 55;
         const CREDIT_COST_WORD = 10;
-        const CREDIT_COST_SENTENCE = 50;
+        const CREDIT_COST_SENTENCE = 45;
         let balanceRefreshTimerId = null;
         const accountElements = new Map();
         let selectedAccountId = null;
@@ -443,6 +443,18 @@
                 .trim()
                 .replace(/\s+/g, '_');
             return cleaned || 'entry';
+        }
+
+        function getFileBaseName(fileName) {
+            if (!fileName) return 'file';
+            const withoutExt = fileName.replace(/\.[^/.]+$/, '');
+            return withoutExt || 'file';
+        }
+
+        function buildSourceMeta(fileName) {
+            const baseName = getFileBaseName(fileName);
+            const sanitizedFolder = sanitizeFilenamePart(baseName);
+            return { sourceName: baseName, sourceFolder: sanitizedFolder };
         }
 
         function getSentenceList(item) {
@@ -857,9 +869,17 @@
             }
         }
 
-        function getSelectedVoiceId() {
+        function getSelectedVoiceMode() {
             const selectedRadio = document.querySelector('input[name="voiceMode"]:checked');
-            const selectedMode = selectedRadio ? selectedRadio.value : 'voiceA';
+            return selectedRadio ? selectedRadio.value : 'voiceA';
+        }
+
+        function isEnglishModeSelected() {
+            return getSelectedVoiceMode() === 'voiceB';
+        }
+
+        function getSelectedVoiceId() {
+            const selectedMode = getSelectedVoiceMode();
             return VOICE_IDS[selectedMode] || VOICE_IDS.voiceA;
         }
 
@@ -933,7 +953,7 @@
             let combinedRows = [];
             try {
                 const contents = await Promise.all(files.map(readFileAsText));
-                combinedRows = contents.flatMap(parseFileContent);
+                combinedRows = contents.flatMap((fileContent, idx) => parseFileContent(fileContent, files[idx]?.name));
             } catch (error) {
                 console.error(error);
                 updateStatus(error.message || 'Failed to read the selected files.', 'error');
@@ -985,8 +1005,9 @@
             }
         }
 
-        function parseFileContent(content) {
+        function parseFileContent(content, fileName) {
             const rows = [];
+            const { sourceName, sourceFolder } = buildSourceMeta(fileName);
             const lines = content.split('\n');
             lines.forEach(line => {
                 const columns = line.split('\t');
@@ -998,7 +1019,7 @@
                     ? sentencesRaw.split('<br>').map(s => s.trim()).filter(Boolean)
                     : [];
                 if (!germanWord) return;
-                rows.push({ word: germanWord, sentences });
+                rows.push({ word: germanWord, sentences, sourceName, sourceFolder });
             });
             return rows;
         }
@@ -1238,10 +1259,15 @@
 
             const filename = `${filenameBase}.mp3`;
 
+            const targetFolder = isEnglishModeSelected() && currentItem && currentItem.sourceFolder
+                ? currentItem.sourceFolder
+                : null;
+            const zipPath = targetFolder ? `${targetFolder}/${filename}` : filename;
+
             if (lastGeneratedBlob) {
-                approvedAudioBlobs.set(filename, lastGeneratedBlob);
+                approvedAudioBlobs.set(zipPath, lastGeneratedBlob);
                 if (!silent) {
-                    updateStatus(`Approved and saved: ${filename}`, 'success');
+                    updateStatus(`Approved and saved: ${zipPath}`, 'success');
                 }
                 zipCount.textContent = approvedAudioBlobs.size;
                 downloadZipBtn.disabled = false;
