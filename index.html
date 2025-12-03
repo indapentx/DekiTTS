@@ -215,13 +215,13 @@
                 <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                     <div>
                         <p class="text-sm font-semibold text-gray-200">Credit Estimate</p>
-                        <p class="text-xs text-gray-400">Remaining items in the current mode.</p>
+                        <p class="text-xs text-gray-400">Remaining characters to generate (1 credit = 1 character).</p>
                     </div>
                     <div class="text-right space-y-1">
                         <p id="creditTotal" class="text-xl font-bold text-indigo-400">0</p>
-                        <p id="creditBreakdown" class="text-xs text-gray-500">0 words · 0 sentences</p>
+                        <p id="creditBreakdown" class="text-xs text-gray-500">0 characters from 0 words · 0 sentences</p>
                         <p id="creditBalanceHint" class="text-xs text-gray-500">Select an account to compare balance.</p>
-                        <p id="creditCardHint" class="text-xs text-gray-500">0 of 0 cards coverable (est.).</p>
+                        <p id="creditCardHint" class="text-xs text-gray-500">0 cards remaining.</p>
                     </div>
                 </div>
             </div>
@@ -362,9 +362,6 @@
         const approvedAudioBlobs = new Map();
         const BALANCE_REFRESH_INTERVAL_MS = 60000;
         const AUTO_GENERATE_DELAY_MS = 50;
-        const CREDIT_COST_CARD = 49;
-        const CREDIT_COST_WORD = 9;
-        const CREDIT_COST_SENTENCE = 40;
         let balanceRefreshTimerId = null;
         const accountElements = new Map();
         let selectedAccountId = null;
@@ -468,9 +465,17 @@
             return Array.isArray(item.sentences) ? item.sentences : [];
         }
 
-        function computePendingCreditCounts() {
-            const counts = { words: 0, sentences: 0 };
-            if (!Array.isArray(allRows) || allRows.length === 0) return counts;
+        function computePendingCharacterStats() {
+            const stats = {
+                totalChars: 0,
+                wordChars: 0,
+                sentenceChars: 0,
+                totalWords: 0,
+                totalSentences: 0,
+                perCardChars: []
+            };
+
+            if (!Array.isArray(allRows) || allRows.length === 0) return stats;
 
             for (let rowIndex = currentRowIndex; rowIndex < allRows.length; rowIndex++) {
                 const row = allRows[rowIndex];
@@ -478,31 +483,38 @@
                 if (length === 0) continue;
 
                 const startIndex = rowIndex === currentRowIndex ? currentSentenceIndex : 0;
+                if (startIndex >= length) continue;
+
+                let cardChars = 0;
+
                 for (let idx = startIndex; idx < length; idx++) {
-                    const type = getContentType(row, idx);
-                    if (type === 'word') {
-                        counts.words += 1;
-                    } else if (type === 'sentence') {
-                        counts.sentences += 1;
+                    const contentType = getContentType(row, idx);
+                    let textValue = getContentAt(row, idx);
+                    let cleaned = typeof textValue === 'string' ? textValue.trim() : '';
+                    if (contentType === 'word') {
+                        cleaned = ensureTrailingPeriodForWord(cleaned);
+                    }
+                    if (!cleaned) continue;
+
+                    const charCount = cleaned.length;
+                    stats.totalChars += charCount;
+                    cardChars += charCount;
+
+                    if (contentType === 'word') {
+                        stats.wordChars += charCount;
+                        stats.totalWords += 1;
+                    } else if (contentType === 'sentence') {
+                        stats.sentenceChars += charCount;
+                        stats.totalSentences += 1;
                     }
                 }
-            }
-            return counts;
-        }
 
-        function computeRemainingCardCount() {
-            if (!Array.isArray(allRows) || allRows.length === 0) return 0;
-            let cards = 0;
-            for (let rowIndex = currentRowIndex; rowIndex < allRows.length; rowIndex++) {
-                const row = allRows[rowIndex];
-                const length = getContentLength(row);
-                if (length === 0) continue;
-                const startIndex = rowIndex === currentRowIndex ? currentSentenceIndex : 0;
-                if (startIndex < length) {
-                    cards += 1;
+                if (cardChars > 0) {
+                    stats.perCardChars.push(cardChars);
                 }
             }
-            return cards;
+
+            return stats;
         }
 
         function getContentType(item, index = 0) {
@@ -1312,24 +1324,32 @@
         }
 
         function updateCreditEstimate() {
-            const counts = computePendingCreditCounts();
-            const totalCredits = counts.words * CREDIT_COST_WORD + counts.sentences * CREDIT_COST_SENTENCE;
-            const remainingCards = computeRemainingCardCount();
+            const stats = computePendingCharacterStats();
+            const remaining = getSelectedAccountRemainingCredits();
+            const remainingCards = stats.perCardChars.length;
 
             if (creditTotalEl) {
-                creditTotalEl.textContent = formatNumber(totalCredits);
+                creditTotalEl.textContent = formatNumber(stats.totalChars);
             }
             if (creditBreakdownEl) {
-                creditBreakdownEl.textContent = `${counts.words} words @ ${CREDIT_COST_WORD} + ${counts.sentences} sentences @ ${CREDIT_COST_SENTENCE}`;
+                creditBreakdownEl.textContent = `${formatNumber(stats.wordChars)} chars from ${stats.totalWords} words · ${formatNumber(stats.sentenceChars)} chars from ${stats.totalSentences} sentences`;
             }
 
-            const remaining = getSelectedAccountRemainingCredits();
             if (creditCardHintEl) {
-                if (remaining === null) {
-                    creditCardHintEl.textContent = `${remainingCards} cards remaining (est. ${CREDIT_COST_CARD} per card).`;
+                if (remainingCards === 0) {
+                    creditCardHintEl.textContent = 'No cards remaining in this mode.';
+                } else if (remaining === null) {
+                    creditCardHintEl.textContent = `${remainingCards} cards remaining (character-based estimate).`;
                 } else {
-                    const coverableCards = Math.floor(remaining / CREDIT_COST_CARD);
-                    creditCardHintEl.textContent = `Can cover ~${Math.min(coverableCards, remainingCards)} of ${remainingCards} cards (est. ${CREDIT_COST_CARD} per card).`;
+                    let coverable = 0;
+                    let budget = remaining;
+                    for (const cardCost of stats.perCardChars) {
+                        if (cardCost <= 0) continue;
+                        if (budget - cardCost < 0) break;
+                        budget -= cardCost;
+                        coverable += 1;
+                    }
+                    creditCardHintEl.textContent = `Can cover ${coverable} of ${remainingCards} cards with ${formatNumber(remaining)} characters left.`;
                 }
             }
 
@@ -1341,17 +1361,17 @@
                 return;
             }
 
-            if (totalCredits === 0) {
-                creditBalanceHintEl.textContent = `Balance: ${formatNumber(remaining)} credits available.`;
+            if (stats.totalChars === 0) {
+                creditBalanceHintEl.textContent = `Balance: ${formatNumber(remaining)} characters available.`;
                 return;
             }
 
-            if (remaining >= totalCredits) {
+            if (remaining >= stats.totalChars) {
                 creditBalanceHintEl.textContent = `Balance covers it: ${formatNumber(remaining)} available.`;
                 creditBalanceHintEl.classList.add('text-green-400');
             } else {
-                const shortfall = totalCredits - remaining;
-                creditBalanceHintEl.textContent = `Short by ${formatNumber(shortfall)} (balance: ${formatNumber(remaining)}).`;
+                const shortfall = stats.totalChars - remaining;
+                creditBalanceHintEl.textContent = `Short by ${formatNumber(shortfall)} characters (balance: ${formatNumber(remaining)}).`;
                 creditBalanceHintEl.classList.add('text-red-400');
             }
         }
