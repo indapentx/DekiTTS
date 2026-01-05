@@ -1176,7 +1176,7 @@
             const textForApi = contentType === 'word'
                 ? ensureTrailingPeriodForWord(textToGenerate)
                 : textToGenerate;
-            const speedSetting = contentType === 'sentence' ? 0.80 : 1;
+            const speedSetting = contentType === 'sentence' ? 0.85 : 1;
             const payload = {
                 "text": textForApi,
                 "model_id": getSelectedModelId(),
