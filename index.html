@@ -331,6 +331,10 @@
             voiceA: "XrExE9yKIg1WjnnlVkGX",
             voiceB: "SAz9YHcvj6GT2YYXdXww"
         };
+        const VOICE_LANGUAGE_CODES = {
+            voiceA: 'de',
+            voiceB: 'en'
+        };
         const DEFAULT_TTS_MODEL_ID = 'eleven_multilingual_v2';
 
         // DOM Elements
@@ -908,6 +912,11 @@
             return VOICE_IDS[selectedMode] || VOICE_IDS.voiceA;
         }
 
+        function getSelectedLanguageCode() {
+            const selectedMode = getSelectedVoiceMode();
+            return VOICE_LANGUAGE_CODES[selectedMode] || null;
+        }
+
         function getSelectedModelId() {
             const selectedModelRadio = document.querySelector('input[name="modelMode"]:checked');
             return selectedModelRadio ? selectedModelRadio.value : DEFAULT_TTS_MODEL_ID;
@@ -1189,6 +1198,10 @@
                     "speed": speedSetting
                 }
             };
+            const languageCode = getSelectedLanguageCode();
+            if (languageCode) {
+                payload.language_code = languageCode;
+            }
 
             if (!silentStatus) {
                 updateStatus(isRegen ? 'Regenerating audio...' : 'Generating audio...', 'loading');
