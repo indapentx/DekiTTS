@@ -439,7 +439,7 @@
         downloadFlaggedBtn.addEventListener('click', downloadFlaggedZip);
         regenerateFlaggedBtn.addEventListener('click', handleRegenerateFlagged);
         autoGenerateBtn.addEventListener('click', handleAutoGenerateAll);
-        document.addEventListener('keydown', handleKeyPress);
+        window.addEventListener('keydown', handleKeyPress, true);
         generationModeRadios.forEach(radio => {
             radio.addEventListener('change', handleGenerationModeChange);
         });
@@ -908,6 +908,31 @@
             lastGeneratedBlob = null;
         }
 
+        function getShortcutTrapElements() {
+            return [
+                audioPlayer,
+                previousBtn,
+                generateBtn,
+                regenerateBtn,
+                approveBtn,
+                flagBtn,
+                nextBtn,
+                autoGenerateBtn,
+                downloadZipBtn,
+                downloadFlaggedBtn,
+                regenerateFlaggedBtn
+            ];
+        }
+
+        function scheduleShortcutFocusRelease(target = document.activeElement) {
+            window.setTimeout(() => {
+                const element = target || document.activeElement;
+                if (!(element instanceof HTMLElement)) return;
+                if (!getShortcutTrapElements().includes(element)) return;
+                element.blur();
+            }, 0);
+        }
+
         function setAudioPlayerBlob(blob, options = {}) {
             const { autoplay = false, showPlayer = true } = options;
             if (!blob) {
@@ -1171,7 +1196,9 @@
             autoModeStatusEl.textContent = message;
         }
 
-        function updateUIForCurrentItem() {
+        function updateUIForCurrentItem(options = {}) {
+            const { autoplayAudio = false } = options;
+
             if (generationQueue.length === 0) {
                 const label = generationMode === 'words'
                     ? 'Word to Review'
@@ -1200,7 +1227,10 @@
             updateCurrentItemStatus(currentItem);
 
             if (currentItem.audioBlob) {
-                setAudioPlayerBlob(currentItem.audioBlob, { showPlayer: true });
+                setAudioPlayerBlob(currentItem.audioBlob, {
+                    showPlayer: true,
+                    autoplay: autoplayAudio
+                });
             } else {
                 clearAudioPlayer();
             }
@@ -1226,13 +1256,14 @@
         // --- Core Functions ---
 
         function handleKeyPress(event) {
-            const tagName = event.target.tagName;
+            const tagName = typeof event.target?.tagName === 'string' ? event.target.tagName : '';
             if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || event.target.isContentEditable) {
                 return;
             }
 
             const clickButton = (button) => {
                 event.preventDefault();
+                scheduleShortcutFocusRelease();
                 button.click();
             };
             const key = event.key.toLowerCase();
@@ -1512,13 +1543,13 @@
         function moveToPreviousItem() {
             if (generationQueue.length === 0 || currentQueueIndex === 0) return;
             currentQueueIndex -= 1;
-            updateUIForCurrentItem();
+            updateUIForCurrentItem({ autoplayAudio: true });
         }
 
         function moveToNextItem() {
             if (generationQueue.length === 0 || currentQueueIndex >= generationQueue.length - 1) return;
             currentQueueIndex += 1;
-            updateUIForCurrentItem();
+            updateUIForCurrentItem({ autoplayAudio: true });
         }
 
         function handleApprove(options = {}) {
@@ -1542,7 +1573,7 @@
             if (advance && currentQueueIndex < generationQueue.length - 1) {
                 currentQueueIndex += 1;
             }
-            updateUIForCurrentItem();
+            updateUIForCurrentItem({ autoplayAudio: true });
         }
 
         function toggleFlagForCurrentItem(options = {}) {
@@ -1798,6 +1829,18 @@
             if (type === 'loading') statusLog.classList.add('text-blue-500');
             if (type === 'info') statusLog.classList.add('text-yellow-400');
         }
+
+        getShortcutTrapElements().forEach(element => {
+            if (!element) return;
+            element.addEventListener('pointerup', () => scheduleShortcutFocusRelease(element));
+            element.addEventListener('keyup', event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    scheduleShortcutFocusRelease(element);
+                }
+            });
+        });
+        audioPlayer.addEventListener('play', () => scheduleShortcutFocusRelease(audioPlayer));
+        audioPlayer.addEventListener('pause', () => scheduleShortcutFocusRelease(audioPlayer));
 
         startBalanceAutoRefresh();
         setAutoGenerateButtonState(false);
