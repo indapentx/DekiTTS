@@ -236,11 +236,26 @@
                     <p id="currentTextLabel" class="text-sm text-gray-400">Sentence to Generate</p>
                     <p id="currentText" class="text-lg font-medium text-gray-100">-</p>
                 </div>
+                <p id="currentItemStatus" class="text-sm text-gray-500">Not generated yet.</p>
                 <audio id="audioPlayer" controls class="w-full mt-4 hidden"></audio>
             </div>
 
+            <!-- Review Summary -->
+            <div class="bg-gray-900/50 p-4 rounded-xl border border-gray-700">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div>
+                        <p class="text-sm font-semibold text-gray-200">Review Queue</p>
+                        <p id="reviewSummary" class="text-xs text-gray-400">0 generated / 0 total</p>
+                    </div>
+                    <p id="reviewHint" class="text-xs text-gray-500">Generate missing audio, then use Previous and Next to review every clip.</p>
+                </div>
+            </div>
+
             <!-- Action Buttons -->
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
+                <button id="previousBtn"
+                    class="bg-gray-700 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-transform transform hover:scale-105 btn-disabled"
+                    disabled>Previous<kbd>P</kbd></button>
                 <button id="generateBtn"
                     class="bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform transform hover:scale-105">Generate<kbd>G</kbd></button>
                 <button id="regenerateBtn"
@@ -249,8 +264,12 @@
                 <button id="approveBtn"
                     class="bg-green-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-transform transform hover:scale-105 btn-disabled"
                     disabled>Approve<kbd>A</kbd></button>
-                <button id="skipBtn"
-                    class="bg-red-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-transform transform hover:scale-105">Skip<kbd>S</kbd></button>
+                <button id="flagBtn"
+                    class="bg-red-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-transform transform hover:scale-105 btn-disabled"
+                    disabled>Flag<kbd>F</kbd></button>
+                <button id="nextBtn"
+                    class="bg-gray-700 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-transform transform hover:scale-105 btn-disabled"
+                    disabled>Next<kbd>N</kbd></button>
             </div>
 
             <!-- Auto Generation -->
@@ -258,22 +277,32 @@
                 <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                     <div>
                         <p class="text-sm font-semibold text-gray-200">Optional: Generate Everything At Once</p>
-                        <p class="text-xs text-gray-400">Auto-generate and approve audio for every loaded card using the current mode.</p>
+                        <p class="text-xs text-gray-400">Generate every missing clip first, then review them one by one and flag the bad ones.</p>
                     </div>
                     <button id="autoGenerateBtn"
                         class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-105">
-                        Generate All (Auto)
+                        Generate All
                     </button>
                 </div>
-                <p id="autoModeStatus" class="text-xs text-gray-500 mt-2">Uses your selected voice, model, and generation mode.</p>
+                <p id="autoModeStatus" class="text-xs text-gray-500 mt-2">Uses your selected voice, model, and generation mode, without auto-approving.</p>
             </div>
 
             <!-- Download Section -->
-            <div class="text-center pt-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
                 <button id="downloadZipBtn"
-                    class="w-full md:w-1/2 bg-gray-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-transform transform hover:scale-105 btn-disabled"
+                    class="w-full bg-gray-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-transform transform hover:scale-105 btn-disabled"
                     disabled>
-                    Download All Approved as ZIP (<span id="zipCount">0</span> files)
+                    Download Ready ZIP (<span id="zipCount">0</span> files)
+                </button>
+                <button id="downloadFlaggedBtn"
+                    class="w-full bg-amber-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 transition-transform transform hover:scale-105 btn-disabled"
+                    disabled>
+                    Download Flagged ZIP (<span id="flaggedZipCount">0</span> files)
+                </button>
+                <button id="regenerateFlaggedBtn"
+                    class="w-full bg-pink-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 transition-transform transform hover:scale-105 btn-disabled"
+                    disabled>
+                    Regenerate Flagged (<span id="regenerateFlaggedCount">0</span>)
                 </button>
             </div>
         </div>
@@ -336,6 +365,17 @@
             voiceB: 'en'
         };
         const DEFAULT_TTS_MODEL_ID = 'eleven_multilingual_v2';
+        const BALANCE_REFRESH_INTERVAL_MS = 60000;
+        const AUTO_GENERATE_DELAY_MS = 10;
+        const BUTTON_LABELS = {
+            previous: 'Previous<kbd>P</kbd>',
+            generate: 'Generate<kbd>G</kbd>',
+            regenerate: 'Regenerate<kbd>R</kbd>',
+            approve: 'Approve<kbd>A</kbd>',
+            flag: 'Flag<kbd>F</kbd>',
+            next: 'Next<kbd>N</kbd>'
+        };
+        const SPINNER_MARKUP = '<div class="spinner w-5 h-5 mx-auto border-2 border-gray-400 rounded-full"></div>';
 
         // DOM Elements
         const fileInput = document.getElementById('fileInput');
@@ -347,13 +387,22 @@
         const currentWordEl = document.getElementById('currentWord');
         const currentTextEl = document.getElementById('currentText');
         const currentTextLabelEl = document.getElementById('currentTextLabel');
+        const currentItemStatusEl = document.getElementById('currentItemStatus');
         const audioPlayer = document.getElementById('audioPlayer');
+        const reviewSummaryEl = document.getElementById('reviewSummary');
+        const reviewHintEl = document.getElementById('reviewHint');
+        const previousBtn = document.getElementById('previousBtn');
         const generateBtn = document.getElementById('generateBtn');
         const regenerateBtn = document.getElementById('regenerateBtn');
         const approveBtn = document.getElementById('approveBtn');
-        const skipBtn = document.getElementById('skipBtn');
+        const flagBtn = document.getElementById('flagBtn');
+        const nextBtn = document.getElementById('nextBtn');
         const downloadZipBtn = document.getElementById('downloadZipBtn');
+        const downloadFlaggedBtn = document.getElementById('downloadFlaggedBtn');
+        const regenerateFlaggedBtn = document.getElementById('regenerateFlaggedBtn');
         const zipCount = document.getElementById('zipCount');
+        const flaggedZipCount = document.getElementById('flaggedZipCount');
+        const regenerateFlaggedCount = document.getElementById('regenerateFlaggedCount');
         const generationModeRadios = document.querySelectorAll('input[name="generationMode"]');
         const accountListEl = document.getElementById('accountList');
         const accountMessageEl = document.getElementById('accountMessage');
@@ -366,27 +415,31 @@
 
         // App State
         let allRows = [];
-        let currentRowIndex = 0;
-        let currentSentenceIndex = 0;
+        let generationQueue = [];
+        let currentQueueIndex = 0;
         let lastGeneratedBlob = null;
         let generationMode = 'sentences';
-        const approvedAudioBlobs = new Map();
-        const BALANCE_REFRESH_INTERVAL_MS = 60000;
-        const AUTO_GENERATE_DELAY_MS = 10;
         let balanceRefreshTimerId = null;
         const accountElements = new Map();
         let selectedAccountId = null;
         let isAutoGenerating = false;
+        let autoStopRequested = false;
+        let activeAudioUrl = null;
+        let loadingButtonKey = null;
 
         // --- Event Listeners ---
         loadFileBtn.addEventListener('click', handleFileLoad);
+        previousBtn.addEventListener('click', moveToPreviousItem);
         generateBtn.addEventListener('click', () => processGeneration(false));
         regenerateBtn.addEventListener('click', () => processGeneration(true));
-        approveBtn.addEventListener('click', handleApprove);
-        skipBtn.addEventListener('click', handleSkip);
-        downloadZipBtn.addEventListener('click', downloadZip);
-        document.addEventListener('keydown', handleKeyPress);
+        approveBtn.addEventListener('click', () => handleApprove());
+        flagBtn.addEventListener('click', () => toggleFlagForCurrentItem());
+        nextBtn.addEventListener('click', moveToNextItem);
+        downloadZipBtn.addEventListener('click', downloadReadyZip);
+        downloadFlaggedBtn.addEventListener('click', downloadFlaggedZip);
+        regenerateFlaggedBtn.addEventListener('click', handleRegenerateFlagged);
         autoGenerateBtn.addEventListener('click', handleAutoGenerateAll);
+        document.addEventListener('keydown', handleKeyPress);
         generationModeRadios.forEach(radio => {
             radio.addEventListener('change', handleGenerationModeChange);
         });
@@ -476,169 +529,6 @@
             return Array.isArray(item.sentences) ? item.sentences : [];
         }
 
-        function computePendingCharacterStats() {
-            const stats = {
-                totalChars: 0,
-                wordChars: 0,
-                sentenceChars: 0,
-                totalWords: 0,
-                totalSentences: 0,
-                perCardChars: []
-            };
-
-            if (!Array.isArray(allRows) || allRows.length === 0) return stats;
-
-            for (let rowIndex = currentRowIndex; rowIndex < allRows.length; rowIndex++) {
-                const row = allRows[rowIndex];
-                const length = getContentLength(row);
-                if (length === 0) continue;
-
-                const startIndex = rowIndex === currentRowIndex ? currentSentenceIndex : 0;
-                if (startIndex >= length) continue;
-
-                let cardChars = 0;
-
-                for (let idx = startIndex; idx < length; idx++) {
-                    const contentType = getContentType(row, idx);
-                    let textValue = getContentAt(row, idx);
-                    let cleaned = typeof textValue === 'string' ? textValue.trim() : '';
-                    if (contentType === 'word') {
-                        cleaned = ensureTrailingPeriodForWord(cleaned);
-                    }
-                    if (!cleaned) continue;
-
-                    const charCount = cleaned.length;
-                    stats.totalChars += charCount;
-                    cardChars += charCount;
-
-                    if (contentType === 'word') {
-                        stats.wordChars += charCount;
-                        stats.totalWords += 1;
-                    } else if (contentType === 'sentence') {
-                        stats.sentenceChars += charCount;
-                        stats.totalSentences += 1;
-                    }
-                }
-
-                if (cardChars > 0) {
-                    stats.perCardChars.push(cardChars);
-                }
-            }
-
-            return stats;
-        }
-
-        function getContentType(item, index = 0) {
-            if (generationMode === 'words') return 'word';
-            if (generationMode === 'sentences') return 'sentence';
-            if (!item) return 'word';
-            const hasWord = Boolean(item.word);
-            if (hasWord && index <= 0) {
-                return 'word';
-            }
-            const offset = hasWord ? 1 : 0;
-            return index >= offset ? 'sentence' : 'word';
-        }
-
-        function getSentenceMeta(item, index) {
-            const sentences = getSentenceList(item);
-            if (sentences.length === 0) {
-                return { total: 0, position: 0 };
-            }
-
-            if (generationMode === 'sentences') {
-                return { total: sentences.length, position: index + 1 };
-            }
-
-            if (generationMode === 'both') {
-                const hasWord = Boolean(item.word);
-                const offset = hasWord ? 1 : 0;
-                const position = index - offset + 1;
-                return {
-                    total: sentences.length,
-                    position: Math.max(position, 1)
-                };
-            }
-
-            return { total: sentences.length, position: 0 };
-        }
-
-        // --- Generation Helpers ---
-
-        function getContentLength(item) {
-            if (!item) return 0;
-            if (generationMode === 'words') {
-                return item.word ? 1 : 0;
-            }
-            if (generationMode === 'sentences') {
-                return getSentenceList(item).length;
-            }
-            const sentenceCount = getSentenceList(item).length;
-            return (item.word ? 1 : 0) + sentenceCount;
-        }
-
-        function getContentAt(item, index) {
-            if (!item) return '';
-            if (generationMode === 'words') {
-                return item.word || '';
-            }
-            if (generationMode === 'sentences') {
-                const sentences = getSentenceList(item);
-                return sentences[index] || '';
-            }
-            const hasWord = Boolean(item.word);
-            if (hasWord) {
-                if (index === 0) {
-                    return item.word || '';
-                }
-                index -= 1;
-            }
-            const sentences = getSentenceList(item);
-            return sentences[index] || '';
-        }
-
-        function ensureTrailingPeriodForWord(text) {
-            const normalized = (text || '').trim();
-            if (!normalized) return '';
-            return /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
-        }
-
-        function getTotalItems() {
-            if (!Array.isArray(allRows) || allRows.length === 0) return 0;
-            return allRows.reduce((sum, row) => sum + getContentLength(row), 0);
-        }
-
-        function getProcessedItemCount() {
-            if (!Array.isArray(allRows) || allRows.length === 0) return 0;
-            const cappedRowIndex = Math.min(currentRowIndex, allRows.length);
-            let count = 0;
-            for (let i = 0; i < cappedRowIndex; i++) {
-                count += getContentLength(allRows[i]);
-            }
-            const currentRow = allRows[currentRowIndex];
-            if (!currentRow) {
-                return getTotalItems();
-            }
-            const currentLength = getContentLength(currentRow);
-            return count + Math.min(currentSentenceIndex, currentLength);
-        }
-
-        function ensureValidPosition() {
-            while (currentRowIndex < allRows.length) {
-                const length = getContentLength(allRows[currentRowIndex]);
-                if (length === 0) {
-                    currentRowIndex++;
-                    currentSentenceIndex = 0;
-                    continue;
-                }
-                if (currentSentenceIndex >= length) {
-                    currentSentenceIndex = 0;
-                    continue;
-                }
-                break;
-            }
-        }
-
         function initializeAccountSelector() {
             const previouslySelected = selectedAccountId;
             accountElements.clear();
@@ -686,11 +576,12 @@
                 keyEl.className = 'text-xs text-gray-500';
                 keyEl.textContent = account.apiKey ? `Key: ${maskApiKey(account.apiKey)}` : 'Add an API key to enable this account.';
 
-                textContainer.appendChild(nameEl);
-                textContainer.appendChild(keyEl);
                 const emailEl = document.createElement('p');
                 emailEl.className = 'text-xs text-gray-500';
                 emailEl.textContent = account.email ? `Email: ${account.email}` : 'Email not provided.';
+
+                textContainer.appendChild(nameEl);
+                textContainer.appendChild(keyEl);
                 textContainer.appendChild(emailEl);
 
                 left.appendChild(radio);
@@ -717,7 +608,14 @@
                     accountListEl.appendChild(wrapper);
                 }
 
-                accountElements.set(account.id, { radioEl: radio, remainingEl, statusEl, wrapperEl: wrapper, account, remainingValue: null });
+                accountElements.set(account.id, {
+                    radioEl: radio,
+                    remainingEl,
+                    statusEl,
+                    wrapperEl: wrapper,
+                    account,
+                    remainingValue: null
+                });
 
                 radio.addEventListener('change', () => {
                     if (radio.checked) {
@@ -744,11 +642,9 @@
             setSelectedAccount(nextSelectedId);
 
             if (accountMessageEl) {
-                if (firstSelectableId) {
-                    accountMessageEl.textContent = 'Balances refresh automatically every minute.';
-                } else {
-                    accountMessageEl.textContent = 'Add API keys to enable account selection.';
-                }
+                accountMessageEl.textContent = firstSelectableId
+                    ? 'Balances refresh automatically every minute.'
+                    : 'Add API keys to enable account selection.';
             }
         }
 
@@ -756,13 +652,9 @@
             selectedAccountId = accountId || null;
             accountElements.forEach(({ radioEl, wrapperEl, account }) => {
                 const isSelected = accountId !== null && account.id === accountId;
-                if (radioEl) {
-                    radioEl.checked = isSelected;
-                }
-                if (wrapperEl) {
-                    wrapperEl.classList.toggle('border-indigo-500', isSelected);
-                    wrapperEl.classList.toggle('shadow-lg', isSelected);
-                }
+                radioEl.checked = isSelected;
+                wrapperEl.classList.toggle('border-indigo-500', isSelected);
+                wrapperEl.classList.toggle('shadow-lg', isSelected);
             });
             updateCreditEstimate();
         }
@@ -864,6 +756,7 @@
                 statusEl.textContent = `Could not load balance (${message}).`;
                 elements.remainingValue = null;
             }
+
             if (account.id === selectedAccountId) {
                 updateCreditEstimate();
             }
@@ -884,18 +777,78 @@
             }, BALANCE_REFRESH_INTERVAL_MS);
         }
 
-        startBalanceAutoRefresh();
+        // --- Queue & Generation Helpers ---
 
-        // --- Core Functions ---
+        function ensureTrailingPeriodForWord(text) {
+            const normalized = (text || '').trim();
+            if (!normalized) return '';
+            return /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
+        }
 
-        function handleKeyPress(event) {
-            if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
-            switch (event.key.toLowerCase()) {
-                case 'g': if (!generateBtn.disabled) generateBtn.click(); break;
-                case 'r': if (!regenerateBtn.disabled) regenerateBtn.click(); break;
-                case 'a': if (!approveBtn.disabled) approveBtn.click(); break;
-                case 's': if (!skipBtn.disabled) skipBtn.click(); break;
+        function createQueueItem(row, rowIndex, contentType, text, sentencePosition = 0, sentenceTotal = 0) {
+            const rawBaseName = row.word || `entry_${rowIndex + 1}`;
+            const sanitizedBase = sanitizeFilenamePart(rawBaseName);
+            const suffix = contentType === 'sentence' && sentenceTotal > 1 && sentencePosition > 1
+                ? String(sentencePosition)
+                : '';
+            const filenameBase = contentType === 'word'
+                ? sanitizedBase
+                : `s_${sanitizedBase}${suffix}`;
+
+            return {
+                id: `${rowIndex}-${contentType}-${contentType === 'sentence' ? sentencePosition : 0}`,
+                rowIndex,
+                word: row.word || `Entry ${rowIndex + 1}`,
+                text,
+                contentType,
+                sentencePosition,
+                sentenceTotal,
+                sourceName: row.sourceName || '',
+                sourceFolder: row.sourceFolder || '',
+                filename: `${filenameBase}.mp3`,
+                audioBlob: null,
+                reviewStatus: 'pending'
+            };
+        }
+
+        function buildGenerationQueue(rows) {
+            if (!Array.isArray(rows) || rows.length === 0) return [];
+
+            const items = [];
+            rows.forEach((row, rowIndex) => {
+                if (!row) return;
+
+                if (generationMode === 'words' || generationMode === 'both') {
+                    const wordText = (row.word || '').trim();
+                    if (wordText) {
+                        items.push(createQueueItem(row, rowIndex, 'word', wordText));
+                    }
+                }
+
+                if (generationMode === 'sentences' || generationMode === 'both') {
+                    const sentences = getSentenceList(row);
+                    sentences.forEach((sentence, sentenceIndex) => {
+                        const trimmed = typeof sentence === 'string' ? sentence.trim() : '';
+                        if (!trimmed) return;
+                        items.push(createQueueItem(row, rowIndex, 'sentence', trimmed, sentenceIndex + 1, sentences.length));
+                    });
+                }
+            });
+
+            return items;
+        }
+
+        function clampCurrentQueueIndex() {
+            if (generationQueue.length === 0) {
+                currentQueueIndex = 0;
+                return;
             }
+            currentQueueIndex = Math.max(0, Math.min(currentQueueIndex, generationQueue.length - 1));
+        }
+
+        function getCurrentQueueItem() {
+            clampCurrentQueueIndex();
+            return generationQueue[currentQueueIndex] || null;
         }
 
         function getSelectedVoiceMode() {
@@ -922,57 +875,455 @@
             return selectedModelRadio ? selectedModelRadio.value : DEFAULT_TTS_MODEL_ID;
         }
 
+        function getItemZipPath(item) {
+            if (!item) return '';
+            const targetFolder = isEnglishModeSelected() && item.sourceFolder ? item.sourceFolder : null;
+            return targetFolder ? `${targetFolder}/${item.filename}` : item.filename;
+        }
+
+        function getItemDisplayWord(item) {
+            if (!item) return '-';
+            let label = item.word || `Entry ${item.rowIndex + 1}`;
+            if (item.contentType === 'sentence' && item.sentenceTotal > 1) {
+                label += ` (${item.sentencePosition}/${item.sentenceTotal})`;
+            }
+            return label;
+        }
+
+        function setButtonDisabled(button, disabled) {
+            if (!button) return;
+            button.disabled = disabled;
+            button.classList.toggle('btn-disabled', disabled);
+        }
+
+        function clearAudioPlayer() {
+            if (activeAudioUrl) {
+                URL.revokeObjectURL(activeAudioUrl);
+                activeAudioUrl = null;
+            }
+            audioPlayer.pause();
+            audioPlayer.removeAttribute('src');
+            audioPlayer.classList.add('hidden');
+            audioPlayer.load();
+            lastGeneratedBlob = null;
+        }
+
+        function setAudioPlayerBlob(blob, options = {}) {
+            const { autoplay = false, showPlayer = true } = options;
+            if (!blob) {
+                clearAudioPlayer();
+                return;
+            }
+
+            if (activeAudioUrl) {
+                URL.revokeObjectURL(activeAudioUrl);
+            }
+            audioPlayer.pause();
+            activeAudioUrl = URL.createObjectURL(blob);
+            audioPlayer.src = activeAudioUrl;
+            audioPlayer.classList.toggle('hidden', !showPlayer);
+            lastGeneratedBlob = blob;
+
+            if (autoplay) {
+                audioPlayer.play().catch(() => { /* ignore autoplay issues */ });
+            }
+        }
+
+        function getQueueSummary() {
+            const summary = {
+                total: generationQueue.length,
+                generated: 0,
+                approved: 0,
+                flagged: 0,
+                pendingGeneration: 0,
+                ready: 0
+            };
+
+            generationQueue.forEach(item => {
+                if (!item.audioBlob) {
+                    summary.pendingGeneration += 1;
+                    return;
+                }
+                summary.generated += 1;
+                if (item.reviewStatus === 'approved') {
+                    summary.approved += 1;
+                }
+                if (item.reviewStatus === 'flagged') {
+                    summary.flagged += 1;
+                }
+            });
+
+            summary.ready = Math.max(summary.generated - summary.flagged, 0);
+            return summary;
+        }
+
+        function computePendingCharacterStats() {
+            const stats = {
+                totalChars: 0,
+                wordChars: 0,
+                sentenceChars: 0,
+                totalWords: 0,
+                totalSentences: 0,
+                perCardChars: []
+            };
+
+            const perCardCharMap = new Map();
+
+            generationQueue.forEach(item => {
+                if (!item || item.audioBlob) return;
+
+                let cleaned = (item.text || '').trim();
+                if (item.contentType === 'word') {
+                    cleaned = ensureTrailingPeriodForWord(cleaned);
+                }
+                if (!cleaned) return;
+
+                const charCount = cleaned.length;
+                stats.totalChars += charCount;
+
+                if (item.contentType === 'word') {
+                    stats.wordChars += charCount;
+                    stats.totalWords += 1;
+                } else {
+                    stats.sentenceChars += charCount;
+                    stats.totalSentences += 1;
+                }
+
+                perCardCharMap.set(item.rowIndex, (perCardCharMap.get(item.rowIndex) || 0) + charCount);
+            });
+
+            stats.perCardChars = Array.from(perCardCharMap.values()).filter(value => value > 0);
+            return stats;
+        }
+
+        function getReadyItems() {
+            return generationQueue.filter(item => item && item.audioBlob && item.reviewStatus !== 'flagged');
+        }
+
+        function getFlaggedItems() {
+            return generationQueue.filter(item => item && item.audioBlob && item.reviewStatus === 'flagged');
+        }
+
+        function getSelectedAccountRemainingCredits() {
+            if (!selectedAccountId) return null;
+            const elements = accountElements.get(selectedAccountId);
+            if (!elements) return null;
+            const { remainingValue } = elements;
+            return typeof remainingValue === 'number' && !Number.isNaN(remainingValue) ? remainingValue : null;
+        }
+
+        function updateCreditEstimate() {
+            const stats = computePendingCharacterStats();
+            const remaining = getSelectedAccountRemainingCredits();
+            const remainingCards = stats.perCardChars.length;
+
+            creditTotalEl.textContent = formatNumber(stats.totalChars);
+            creditBreakdownEl.textContent = `${formatNumber(stats.wordChars)} chars from ${stats.totalWords} words · ${formatNumber(stats.sentenceChars)} chars from ${stats.totalSentences} sentences`;
+
+            if (remainingCards === 0) {
+                creditCardHintEl.textContent = generationQueue.length === 0
+                    ? 'Load a file to estimate credit usage.'
+                    : 'No clips remaining to generate in this mode.';
+            } else if (remaining === null) {
+                creditCardHintEl.textContent = `${remainingCards} cards still need generation.`;
+            } else {
+                let coverable = 0;
+                let budget = remaining;
+                for (const cardCost of stats.perCardChars) {
+                    if (cardCost <= 0) continue;
+                    if (budget - cardCost < 0) break;
+                    budget -= cardCost;
+                    coverable += 1;
+                }
+                creditCardHintEl.textContent = `Can cover ${coverable} of ${remainingCards} cards with ${formatNumber(remaining)} characters left.`;
+            }
+
+            creditBalanceHintEl.classList.remove('text-green-400', 'text-red-400');
+            if (remaining === null) {
+                creditBalanceHintEl.textContent = 'Select an account to compare balance.';
+                return;
+            }
+
+            if (stats.totalChars === 0) {
+                creditBalanceHintEl.textContent = `Balance: ${formatNumber(remaining)} characters available.`;
+                return;
+            }
+
+            if (remaining >= stats.totalChars) {
+                creditBalanceHintEl.textContent = `Balance covers it: ${formatNumber(remaining)} available.`;
+                creditBalanceHintEl.classList.add('text-green-400');
+            } else {
+                const shortfall = stats.totalChars - remaining;
+                creditBalanceHintEl.textContent = `Short by ${formatNumber(shortfall)} characters (balance: ${formatNumber(remaining)}).`;
+                creditBalanceHintEl.classList.add('text-red-400');
+            }
+        }
+
+        function updateCurrentItemStatus(item) {
+            currentItemStatusEl.classList.remove('text-gray-500', 'text-green-400', 'text-amber-400', 'text-indigo-400');
+
+            if (!item) {
+                currentItemStatusEl.classList.add('text-gray-500');
+                currentItemStatusEl.textContent = 'No clip queued in this mode.';
+                return;
+            }
+
+            if (!item.audioBlob) {
+                currentItemStatusEl.classList.add('text-gray-500');
+                currentItemStatusEl.textContent = `Not generated yet. Output file will be ${getItemZipPath(item)}.`;
+                return;
+            }
+
+            if (item.reviewStatus === 'flagged') {
+                currentItemStatusEl.classList.add('text-amber-400');
+                currentItemStatusEl.textContent = `Flagged for follow-up. Output file is ${getItemZipPath(item)}.`;
+                return;
+            }
+
+            if (item.reviewStatus === 'approved') {
+                currentItemStatusEl.classList.add('text-green-400');
+                currentItemStatusEl.textContent = `Approved and ready for export as ${getItemZipPath(item)}.`;
+                return;
+            }
+
+            currentItemStatusEl.classList.add('text-indigo-400');
+            currentItemStatusEl.textContent = `Generated and ready for review as ${getItemZipPath(item)}.`;
+        }
+
+        function updateReviewSummary() {
+            const summary = getQueueSummary();
+            const controlsLocked = isAutoGenerating || Boolean(loadingButtonKey);
+
+            if (summary.total === 0) {
+                reviewSummaryEl.textContent = '0 generated / 0 total';
+                reviewHintEl.textContent = 'Load a file to build the review queue.';
+            } else if (summary.pendingGeneration > 0) {
+                reviewSummaryEl.textContent = `${summary.generated} generated / ${summary.total} total · ${summary.approved} approved · ${summary.flagged} flagged`;
+                reviewHintEl.textContent = `${summary.pendingGeneration} clip${summary.pendingGeneration === 1 ? '' : 's'} still need generation. Use Generate All or work through them manually.`;
+            } else if (summary.flagged > 0) {
+                reviewSummaryEl.textContent = `${summary.generated} generated / ${summary.total} total · ${summary.approved} approved · ${summary.flagged} flagged`;
+                reviewHintEl.textContent = 'Everything is generated. Review flagged clips again, regenerate them, or export the flagged ZIP.';
+            } else {
+                reviewSummaryEl.textContent = `${summary.generated} generated / ${summary.total} total · ${summary.approved} approved · 0 flagged`;
+                reviewHintEl.textContent = 'Everything is generated. Use Previous and Next to review and flag anything that sounds wrong.';
+            }
+
+            zipCount.textContent = summary.ready;
+            flaggedZipCount.textContent = summary.flagged;
+            regenerateFlaggedCount.textContent = summary.flagged;
+
+            setButtonDisabled(downloadZipBtn, controlsLocked || summary.ready === 0);
+            setButtonDisabled(downloadFlaggedBtn, controlsLocked || summary.flagged === 0);
+            setButtonDisabled(regenerateFlaggedBtn, controlsLocked || summary.flagged === 0);
+            setButtonDisabled(autoGenerateBtn, Boolean(loadingButtonKey) || (!isAutoGenerating && summary.total === 0));
+        }
+
+        function updateActionButtons() {
+            const currentItem = getCurrentQueueItem();
+            const hasItem = Boolean(currentItem);
+            const hasAudio = Boolean(currentItem && currentItem.audioBlob);
+            const isLocked = isAutoGenerating || Boolean(loadingButtonKey);
+
+            previousBtn.innerHTML = BUTTON_LABELS.previous;
+            generateBtn.innerHTML = loadingButtonKey === 'generate' ? SPINNER_MARKUP : BUTTON_LABELS.generate;
+            regenerateBtn.innerHTML = loadingButtonKey === 'regenerate' ? SPINNER_MARKUP : BUTTON_LABELS.regenerate;
+            approveBtn.innerHTML = BUTTON_LABELS.approve;
+            flagBtn.innerHTML = currentItem && currentItem.reviewStatus === 'flagged' ? 'Unflag<kbd>F</kbd>' : BUTTON_LABELS.flag;
+            nextBtn.innerHTML = BUTTON_LABELS.next;
+
+            setButtonDisabled(previousBtn, isLocked || !hasItem || currentQueueIndex === 0);
+            setButtonDisabled(generateBtn, isLocked || !hasItem || hasAudio);
+            setButtonDisabled(regenerateBtn, isLocked || !hasAudio);
+            setButtonDisabled(approveBtn, isLocked || !hasAudio);
+            setButtonDisabled(flagBtn, isLocked || !hasAudio);
+            setButtonDisabled(nextBtn, isLocked || !hasItem || currentQueueIndex >= generationQueue.length - 1);
+        }
+
+        function setLoadingState(isLoading, buttonKey = 'generate') {
+            loadingButtonKey = isLoading ? buttonKey : null;
+            updateReviewSummary();
+            updateActionButtons();
+        }
+
+        function updateProgress() {
+            const totalItems = generationQueue.length;
+            if (totalItems === 0) {
+                progressCounter.textContent = '0 / 0';
+                progressBar.style.width = '0%';
+                return;
+            }
+
+            clampCurrentQueueIndex();
+            const displayCurrent = currentQueueIndex + 1;
+            progressCounter.textContent = `${displayCurrent} / ${totalItems}`;
+            progressBar.style.width = `${(displayCurrent / totalItems) * 100}%`;
+        }
+
+        function setAutoGenerateButtonState(isRunning) {
+            autoGenerateBtn.textContent = isRunning ? 'Stop Batch' : 'Generate All';
+            autoGenerateBtn.classList.toggle('bg-pink-600', isRunning);
+            autoGenerateBtn.classList.toggle('hover:bg-pink-700', isRunning);
+            autoGenerateBtn.classList.toggle('bg-indigo-600', !isRunning);
+            autoGenerateBtn.classList.toggle('hover:bg-indigo-700', !isRunning);
+        }
+
+        function setAutoModeMessage(message) {
+            autoModeStatusEl.textContent = message;
+        }
+
+        function updateUIForCurrentItem() {
+            if (generationQueue.length === 0) {
+                const label = generationMode === 'words'
+                    ? 'Word to Review'
+                    : (generationMode === 'sentences' ? 'Sentence to Review' : 'Word or Sentence to Review');
+                currentTextLabelEl.textContent = label;
+                currentWordEl.textContent = 'No content available';
+                currentTextEl.textContent = generationMode === 'words'
+                    ? 'Load an export with vocabulary terms in the second column.'
+                    : (generationMode === 'sentences'
+                        ? 'Load an export with example sentences in the fourth column.'
+                        : 'Load an export with vocabulary terms in the second column and example sentences in the fourth column.');
+                updateCurrentItemStatus(null);
+                clearAudioPlayer();
+                updateProgress();
+                updateReviewSummary();
+                updateCreditEstimate();
+                updateActionButtons();
+                return;
+            }
+
+            clampCurrentQueueIndex();
+            const currentItem = getCurrentQueueItem();
+            currentTextLabelEl.textContent = currentItem.contentType === 'sentence' ? 'Sentence to Review' : 'Word to Review';
+            currentWordEl.textContent = getItemDisplayWord(currentItem);
+            currentTextEl.textContent = currentItem.text || '-';
+            updateCurrentItemStatus(currentItem);
+
+            if (currentItem.audioBlob) {
+                setAudioPlayerBlob(currentItem.audioBlob, { showPlayer: true });
+            } else {
+                clearAudioPlayer();
+            }
+
+            updateProgress();
+            updateReviewSummary();
+            updateCreditEstimate();
+            updateActionButtons();
+        }
+
+        async function extractApiErrorMessage(response) {
+            try {
+                const errorData = await response.json();
+                if (errorData && errorData.detail && errorData.detail.message) {
+                    return errorData.detail.message;
+                }
+            } catch (error) {
+                /* ignore parsing issues */
+            }
+            return 'An unknown API error occurred.';
+        }
+
+        // --- Core Functions ---
+
+        function handleKeyPress(event) {
+            const tagName = event.target.tagName;
+            if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || event.target.isContentEditable) {
+                return;
+            }
+
+            const clickButton = (button) => {
+                event.preventDefault();
+                button.click();
+            };
+            const key = event.key.toLowerCase();
+            switch (key) {
+                case 'p':
+                case 'arrowleft':
+                    if (!previousBtn.disabled) clickButton(previousBtn);
+                    break;
+                case 'g':
+                    if (!generateBtn.disabled) clickButton(generateBtn);
+                    break;
+                case 'r':
+                    if (!regenerateBtn.disabled) clickButton(regenerateBtn);
+                    break;
+                case 'a':
+                    if (!approveBtn.disabled) clickButton(approveBtn);
+                    break;
+                case 'f':
+                    if (!flagBtn.disabled) clickButton(flagBtn);
+                    break;
+                case 'n':
+                case 's':
+                case 'arrowright':
+                    if (!nextBtn.disabled) clickButton(nextBtn);
+                    break;
+            }
+        }
+
         function handleGenerationModeChange(event) {
             const { value } = event.target;
             if (!value || value === generationMode) return;
 
             generationMode = value;
-            currentRowIndex = 0;
-            currentSentenceIndex = 0;
-            lastGeneratedBlob = null;
+            currentQueueIndex = 0;
+            clearAudioPlayer();
             setLoadingState(false);
-            updateButtons(false);
-            audioPlayer.classList.add('hidden');
-            audioPlayer.src = '';
-
-            ensureValidPosition();
+            generationQueue = buildGenerationQueue(allRows);
             updateUIForCurrentItem();
-            updateCreditEstimate();
+
             if (!Array.isArray(allRows) || allRows.length === 0) {
                 return;
             }
 
-            const totalItems = getTotalItems();
-            if (totalItems === 0) {
-                let emptyMessage;
-                if (generationMode === 'words') {
-                    emptyMessage = 'Words mode is ready, but no terms were found in the second column.';
-                } else if (generationMode === 'sentences') {
-                    emptyMessage = 'Sentence mode is ready, but no example sentences were found in the fourth column.';
-                } else {
-                    emptyMessage = 'Combined mode is ready, but no terms or example sentences were found.';
-                }
+            if (generationQueue.length === 0) {
+                const emptyMessage = generationMode === 'words'
+                    ? 'Words mode is ready, but no terms were found in the second column.'
+                    : (generationMode === 'sentences'
+                        ? 'Sentence mode is ready, but no example sentences were found in the fourth column.'
+                        : 'Combined mode is ready, but no terms or example sentences were found.');
                 updateStatus(emptyMessage, 'info');
-            } else {
-                let modeMessage;
-                if (generationMode === 'words') {
-                    modeMessage = 'Switched to word pronunciation mode.';
-                } else if (generationMode === 'sentences') {
-                    modeMessage = 'Switched to example sentence mode.';
-                } else {
-                    modeMessage = 'Switched to alternating word and sentence mode.';
-                }
-                updateStatus(modeMessage, 'info');
+                return;
             }
+
+            const modeMessage = generationMode === 'words'
+                ? 'Switched to word pronunciation mode.'
+                : (generationMode === 'sentences'
+                    ? 'Switched to example sentence mode.'
+                    : 'Switched to alternating word and sentence mode.');
+            updateStatus(modeMessage, 'info');
         }
 
         function readFileAsText(file) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
-                reader.onload = (event) => resolve(event.target.result);
+                reader.onload = event => resolve(event.target.result);
                 reader.onerror = () => reject(new Error(`Failed to read ${file.name}.`));
                 reader.readAsText(file, 'UTF-8');
             });
+        }
+
+        function parseFileContent(content, fileName) {
+            const rows = [];
+            const { sourceName, sourceFolder } = buildSourceMeta(fileName);
+            const lines = content.split('\n');
+
+            lines.forEach(line => {
+                const columns = line.split('\t');
+                if (columns.length < 2) return;
+
+                const termCandidate = columns[1] !== undefined ? columns[1] : columns[0];
+                const word = (termCandidate || '').trim();
+                const sentencesRaw = (columns[3] || '').trim();
+                const sentences = sentencesRaw
+                    ? sentencesRaw.split('<br>').map(value => value.trim()).filter(Boolean)
+                    : [];
+
+                if (!word) return;
+                rows.push({ word, sentences, sourceName, sourceFolder });
+            });
+
+            return rows;
         }
 
         async function handleFileLoad() {
@@ -987,150 +1338,45 @@
             let combinedRows = [];
             try {
                 const contents = await Promise.all(files.map(readFileAsText));
-                combinedRows = contents.flatMap((fileContent, idx) => parseFileContent(fileContent, files[idx]?.name));
+                combinedRows = contents.flatMap((fileContent, index) => parseFileContent(fileContent, files[index]?.name));
             } catch (error) {
-                console.error(error);
                 updateStatus(error.message || 'Failed to read the selected files.', 'error');
                 return;
             }
 
             allRows = combinedRows;
-            currentRowIndex = 0;
-            currentSentenceIndex = 0;
-            lastGeneratedBlob = null;
+            generationQueue = buildGenerationQueue(allRows);
+            currentQueueIndex = 0;
+            isAutoGenerating = false;
+            autoStopRequested = false;
+            setAutoGenerateButtonState(false);
+            setAutoModeMessage('Uses your selected voice, model, and generation mode, without auto-approving.');
             setLoadingState(false);
-            updateButtons(false);
-            audioPlayer.classList.add('hidden');
-            audioPlayer.src = '';
-
-            approvedAudioBlobs.clear();
-            zipCount.textContent = approvedAudioBlobs.size;
-            downloadZipBtn.disabled = true;
-            downloadZipBtn.classList.add('btn-disabled');
-            updateCreditEstimate();
+            clearAudioPlayer();
 
             if (allRows.length === 0) {
                 workspace.classList.add('hidden');
                 updateStatus('File is empty or could not be parsed.', 'error');
-                updateProgress();
+                updateUIForCurrentItem();
                 return;
             }
 
-            ensureValidPosition();
             workspace.classList.remove('hidden');
             updateUIForCurrentItem();
 
-            const totalItems = getTotalItems();
-            if (totalItems > 0) {
+            if (generationQueue.length > 0) {
                 const successMessage = files.length === 1
-                    ? 'File loaded. Ready to generate.'
-                    : `${files.length} files loaded. Ready to generate.`;
+                    ? 'File loaded. Ready to generate and review.'
+                    : `${files.length} files loaded. Ready to generate and review.`;
                 updateStatus(successMessage, 'success');
             } else {
-                let infoMessage;
-                if (generationMode === 'words') {
-                    infoMessage = 'File loaded, but no vocabulary terms were detected in the second column.';
-                } else if (generationMode === 'sentences') {
-                    infoMessage = 'File loaded, but no example sentences were detected in the fourth column.';
-                } else {
-                    infoMessage = 'File loaded, but no vocabulary terms or example sentences were detected in the required columns.';
-                }
+                const infoMessage = generationMode === 'words'
+                    ? 'File loaded, but no vocabulary terms were detected in the second column.'
+                    : (generationMode === 'sentences'
+                        ? 'File loaded, but no example sentences were detected in the fourth column.'
+                        : 'File loaded, but no vocabulary terms or example sentences were detected in the required columns.');
                 updateStatus(infoMessage, 'info');
             }
-        }
-
-        function parseFileContent(content, fileName) {
-            const rows = [];
-            const { sourceName, sourceFolder } = buildSourceMeta(fileName);
-            const lines = content.split('\n');
-            lines.forEach(line => {
-                const columns = line.split('\t');
-                if (columns.length < 2) return;
-                const termCandidate = columns[1] !== undefined ? columns[1] : columns[0];
-                const germanWord = (termCandidate || '').trim();
-                const sentencesRaw = (columns[3] || '').trim();
-                const sentences = sentencesRaw
-                    ? sentencesRaw.split('<br>').map(s => s.trim()).filter(Boolean)
-                    : [];
-                if (!germanWord) return;
-                rows.push({ word: germanWord, sentences, sourceName, sourceFolder });
-            });
-            return rows;
-        }
-
-        function updateUIForCurrentItem() {
-            const totalItems = getTotalItems();
-
-            if (totalItems === 0) {
-                if (currentTextLabelEl) {
-                    const label = generationMode === 'words'
-                        ? 'Word to Generate'
-                        : (generationMode === 'sentences' ? 'Sentence to Generate' : 'Word or Sentence to Generate');
-                    currentTextLabelEl.textContent = label;
-                }
-                currentWordEl.textContent = 'No content available';
-                let helperText;
-                if (generationMode === 'words') {
-                    helperText = 'Load an export with vocabulary terms in the second column.';
-                } else if (generationMode === 'sentences') {
-                    helperText = 'Load an export with example sentences in the fourth column.';
-                } else {
-                    helperText = 'Load an export with vocabulary terms in the second column and example sentences in the fourth column.';
-                }
-                currentTextEl.textContent = helperText;
-                audioPlayer.classList.add('hidden');
-                audioPlayer.src = '';
-                lastGeneratedBlob = null;
-                disableAllActionButtons();
-                updateProgress();
-                updateCreditEstimate();
-                return;
-            }
-
-            ensureValidPosition();
-
-            if (currentRowIndex >= allRows.length) {
-                currentWordEl.textContent = 'All Done!';
-                currentTextEl.textContent = 'You have processed all items.';
-                audioPlayer.classList.add('hidden');
-                audioPlayer.src = '';
-                lastGeneratedBlob = null;
-                disableAllActionButtons();
-                updateStatus('Congratulations! You finished the list.', 'success');
-                updateProgress();
-                updateCreditEstimate();
-                return;
-            }
-
-            const currentItem = allRows[currentRowIndex];
-            const contentType = getContentType(currentItem, currentSentenceIndex);
-            if (currentTextLabelEl) {
-                currentTextLabelEl.textContent = contentType === 'sentence' ? 'Sentence to Generate' : 'Word to Generate';
-            }
-            const currentTextValue = getContentAt(currentItem, currentSentenceIndex) || '';
-            let wordDisplay = currentItem.word || `Entry ${currentRowIndex + 1}`;
-            if (contentType === 'sentence') {
-                const { total, position } = getSentenceMeta(currentItem, currentSentenceIndex);
-                if (total > 1) {
-                    wordDisplay += ` (${position}/${total})`;
-                }
-            }
-            currentWordEl.textContent = wordDisplay;
-            currentTextEl.textContent = currentTextValue;
-
-            audioPlayer.classList.add('hidden');
-            audioPlayer.src = '';
-            lastGeneratedBlob = null;
-
-            if (isAutoGenerating) {
-                disableAllActionButtons();
-            } else {
-                updateButtons(false);
-                skipBtn.disabled = false;
-                skipBtn.classList.remove('btn-disabled');
-            }
-            updateProgress();
-            updateCreditEstimate();
         }
 
         async function processGeneration(isRegen, options = {}) {
@@ -1138,27 +1384,25 @@
                 skipPlayback = false,
                 silentStatus = false,
                 manageLoadingState = true,
-                updateButtonState = true
+                targetIndex = currentQueueIndex
             } = options;
 
-            ensureValidPosition();
-            if (currentRowIndex >= allRows.length) {
+            if (generationQueue.length === 0) {
                 if (!silentStatus) {
                     updateStatus('No items available to generate.', 'error');
                 }
                 return false;
             }
 
-            const currentItem = allRows[currentRowIndex];
-            const rawText = getContentAt(currentItem, currentSentenceIndex);
-            if (!rawText) {
+            const targetItem = generationQueue[targetIndex];
+            if (!targetItem) {
                 if (!silentStatus) {
-                    updateStatus('No text available for this entry.', 'error');
+                    updateStatus('No queued item found for generation.', 'error');
                 }
                 return false;
             }
 
-            const textToGenerate = rawText.trim();
+            const textToGenerate = (targetItem.text || '').trim();
             if (!textToGenerate) {
                 if (!silentStatus) {
                     updateStatus('Text is empty after trimming.', 'error');
@@ -1182,22 +1426,20 @@
                 return false;
             }
 
-            const contentType = getContentType(currentItem, currentSentenceIndex);
-            const textForApi = contentType === 'word'
-                ? ensureTrailingPeriodForWord(textToGenerate)
-                : textToGenerate;
-            const speedSetting = contentType === 'sentence' ? 0.85 : 1;
             const payload = {
-                "text": textForApi,
-                "model_id": getSelectedModelId(),
-                "voice_settings": {
-                    "stability": 0.5,
-                    "similarity_boost": 0.75,
-                    "style": 0.0,
-                    "use_speaker_boost": true,
-                    "speed": speedSetting
+                text: targetItem.contentType === 'word'
+                    ? ensureTrailingPeriodForWord(textToGenerate)
+                    : textToGenerate,
+                model_id: getSelectedModelId(),
+                voice_settings: {
+                    stability: 0.5,
+                    similarity_boost: 0.75,
+                    style: 0.0,
+                    use_speaker_boost: true,
+                    speed: targetItem.contentType === 'sentence' ? 0.85 : 1
                 }
             };
+
             const languageCode = getSelectedLanguageCode();
             if (languageCode) {
                 payload.language_code = languageCode;
@@ -1207,50 +1449,54 @@
                 updateStatus(isRegen ? 'Regenerating audio...' : 'Generating audio...', 'loading');
             }
             if (manageLoadingState) {
-                setLoadingState(true);
+                setLoadingState(true, isRegen ? 'regenerate' : 'generate');
             }
 
             const TTS_URL = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
             const headers = {
-                "Accept": "audio/mpeg",
-                "Content-Type": "application/json",
-                "xi-api-key": activeAccount.apiKey
+                Accept: 'audio/mpeg',
+                'Content-Type': 'application/json',
+                'xi-api-key': activeAccount.apiKey
             };
 
             try {
-                const response = await fetch(TTS_URL, { method: 'POST', headers, body: JSON.stringify(payload) });
-                if (response.ok) {
-                    const blob = await response.blob();
-                    lastGeneratedBlob = blob;
-                    const audioUrl = URL.createObjectURL(blob);
-                    audioPlayer.src = audioUrl;
-                    if (skipPlayback) {
-                        audioPlayer.classList.add('hidden');
-                    } else {
-                        audioPlayer.classList.remove('hidden');
-                    }
-                    if (!skipPlayback) {
-                        audioPlayer.play().catch(() => { /* ignore autoplay issues */ });
-                    }
-                    if (!silentStatus) {
-                        updateStatus('Audio generated. Please review.', 'success');
-                    }
-                    if (updateButtonState) {
-                        updateButtons(true);
-                    }
-                    refreshAccountBalance(activeAccount, { silent: true });
-                    return true;
-                } else {
-                    const errorData = await response.json();
-                    const errorMessage = errorData.detail ? errorData.detail.message : 'An unknown API error occurred.';
+                const response = await fetch(TTS_URL, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorMessage = await extractApiErrorMessage(response);
                     if (!silentStatus) {
                         updateStatus(`Error: ${errorMessage}`, 'error');
                     }
-                    if (updateButtonState) {
-                        updateButtons(false);
-                    }
                     return false;
                 }
+
+                const blob = await response.blob();
+                targetItem.audioBlob = blob;
+                if (targetItem.reviewStatus !== 'flagged') {
+                    targetItem.reviewStatus = 'generated';
+                }
+                lastGeneratedBlob = blob;
+
+                if (targetIndex === currentQueueIndex) {
+                    setAudioPlayerBlob(blob, {
+                        autoplay: !skipPlayback,
+                        showPlayer: !skipPlayback
+                    });
+                }
+
+                if (!silentStatus) {
+                    updateStatus('Audio generated. Review it and flag if needed.', 'success');
+                }
+
+                refreshAccountBalance(activeAccount, { silent: true });
+                updateReviewSummary();
+                updateCreditEstimate();
+                updateActionButtons();
+                return true;
             } catch (error) {
                 if (!silentStatus) {
                     updateStatus(`Network Error: ${error.message}`, 'error');
@@ -1263,162 +1509,74 @@
             }
         }
 
+        function moveToPreviousItem() {
+            if (generationQueue.length === 0 || currentQueueIndex === 0) return;
+            currentQueueIndex -= 1;
+            updateUIForCurrentItem();
+        }
+
+        function moveToNextItem() {
+            if (generationQueue.length === 0 || currentQueueIndex >= generationQueue.length - 1) return;
+            currentQueueIndex += 1;
+            updateUIForCurrentItem();
+        }
+
         function handleApprove(options = {}) {
+            const { silent = false, advance = true } = options;
+            const currentItem = getCurrentQueueItem();
+
+            if (!currentItem || !currentItem.audioBlob) {
+                if (!silent) {
+                    updateStatus('Generate audio before approving.', 'error');
+                }
+                return;
+            }
+
+            currentItem.reviewStatus = 'approved';
+            lastGeneratedBlob = currentItem.audioBlob;
+
+            if (!silent) {
+                updateStatus(`Approved ${getItemDisplayWord(currentItem)}.`, 'success');
+            }
+
+            if (advance && currentQueueIndex < generationQueue.length - 1) {
+                currentQueueIndex += 1;
+            }
+            updateUIForCurrentItem();
+        }
+
+        function toggleFlagForCurrentItem(options = {}) {
             const { silent = false } = options;
+            const currentItem = getCurrentQueueItem();
 
-            if (currentRowIndex >= allRows.length) {
+            if (!currentItem || !currentItem.audioBlob) {
                 if (!silent) {
-                    updateStatus('Nothing to approve.', 'error');
+                    updateStatus('Generate audio before flagging it.', 'error');
                 }
                 return;
             }
 
-            const currentItem = allRows[currentRowIndex];
-            const textValue = getContentAt(currentItem, currentSentenceIndex);
-            if (!textValue) {
-                if (!silent) {
-                    updateStatus('Nothing to approve for this entry.', 'error');
-                }
-                return;
+            const isFlagged = currentItem.reviewStatus === 'flagged';
+            currentItem.reviewStatus = isFlagged ? 'generated' : 'flagged';
+
+            if (!silent) {
+                updateStatus(isFlagged ? 'Flag cleared for the current clip.' : 'Current clip flagged for follow-up.', 'info');
             }
 
-            const rawBaseName = currentItem.word || `entry_${currentRowIndex + 1}`;
-            const sanitizedBase = sanitizeFilenamePart(rawBaseName);
-            const contentType = getContentType(currentItem, currentSentenceIndex);
-
-            let filenameBase;
-            if (contentType === 'word') {
-                filenameBase = sanitizedBase;
-            } else {
-                const { total, position } = getSentenceMeta(currentItem, currentSentenceIndex);
-                const suffix = total > 1 && position > 1 ? position.toString() : '';
-                filenameBase = `s_${sanitizedBase}${suffix}`;
-            }
-
-            const filename = `${filenameBase}.mp3`;
-
-            const targetFolder = isEnglishModeSelected() && currentItem && currentItem.sourceFolder
-                ? currentItem.sourceFolder
-                : null;
-            const zipPath = targetFolder ? `${targetFolder}/${filename}` : filename;
-
-            if (lastGeneratedBlob) {
-                approvedAudioBlobs.set(zipPath, lastGeneratedBlob);
-                if (!silent) {
-                    updateStatus(`Approved and saved: ${zipPath}`, 'success');
-                }
-                zipCount.textContent = approvedAudioBlobs.size;
-                downloadZipBtn.disabled = false;
-                downloadZipBtn.classList.remove('btn-disabled');
-            } else if (!silent) {
-                updateStatus('Generate audio before approving.', 'error');
-            }
-
-            // Move to the next sentence or word
-            moveToNextItem();
-        }
-
-        function handleSkip() {
-            const currentItem = allRows[currentRowIndex];
-            const contentType = getContentType(currentItem, currentSentenceIndex);
-            const label = contentType === 'sentence' ? 'sentence' : 'word';
-            updateStatus(`Skipped ${label}`, 'info');
-            moveToNextItem();
-        }
-
-        function setAutoGenerateButtonState(isRunning) {
-            if (!autoGenerateBtn) return;
-            autoGenerateBtn.textContent = isRunning ? 'Stop Auto Mode' : 'Generate All (Auto)';
-            autoGenerateBtn.classList.toggle('bg-pink-600', isRunning);
-            autoGenerateBtn.classList.toggle('hover:bg-pink-700', isRunning);
-            autoGenerateBtn.classList.toggle('bg-indigo-600', !isRunning);
-            autoGenerateBtn.classList.toggle('hover:bg-indigo-700', !isRunning);
-        }
-
-        function getSelectedAccountRemainingCredits() {
-            if (!selectedAccountId) return null;
-            const elements = accountElements.get(selectedAccountId);
-            if (!elements) return null;
-            const { remainingValue } = elements;
-            return typeof remainingValue === 'number' && !Number.isNaN(remainingValue) ? remainingValue : null;
-        }
-
-        function updateCreditEstimate() {
-            const stats = computePendingCharacterStats();
-            const remaining = getSelectedAccountRemainingCredits();
-            const remainingCards = stats.perCardChars.length;
-
-            if (creditTotalEl) {
-                creditTotalEl.textContent = formatNumber(stats.totalChars);
-            }
-            if (creditBreakdownEl) {
-                creditBreakdownEl.textContent = `${formatNumber(stats.wordChars)} chars from ${stats.totalWords} words · ${formatNumber(stats.sentenceChars)} chars from ${stats.totalSentences} sentences`;
-            }
-
-            if (creditCardHintEl) {
-                if (remainingCards === 0) {
-                    creditCardHintEl.textContent = 'No cards remaining in this mode.';
-                } else if (remaining === null) {
-                    creditCardHintEl.textContent = `${remainingCards} cards remaining (character-based estimate).`;
-                } else {
-                    let coverable = 0;
-                    let budget = remaining;
-                    for (const cardCost of stats.perCardChars) {
-                        if (cardCost <= 0) continue;
-                        if (budget - cardCost < 0) break;
-                        budget -= cardCost;
-                        coverable += 1;
-                    }
-                    creditCardHintEl.textContent = `Can cover ${coverable} of ${remainingCards} cards with ${formatNumber(remaining)} characters left.`;
-                }
-            }
-
-            if (!creditBalanceHintEl) return;
-
-            creditBalanceHintEl.classList.remove('text-green-400', 'text-red-400');
-            if (remaining === null) {
-                creditBalanceHintEl.textContent = 'Select an account to compare balance.';
-                return;
-            }
-
-            if (stats.totalChars === 0) {
-                creditBalanceHintEl.textContent = `Balance: ${formatNumber(remaining)} characters available.`;
-                return;
-            }
-
-            if (remaining >= stats.totalChars) {
-                creditBalanceHintEl.textContent = `Balance covers it: ${formatNumber(remaining)} available.`;
-                creditBalanceHintEl.classList.add('text-green-400');
-            } else {
-                const shortfall = stats.totalChars - remaining;
-                creditBalanceHintEl.textContent = `Short by ${formatNumber(shortfall)} characters (balance: ${formatNumber(remaining)}).`;
-                creditBalanceHintEl.classList.add('text-red-400');
-            }
-        }
-
-        function setManualButtonsLocked(locked) {
-            [generateBtn, regenerateBtn, approveBtn, skipBtn].forEach(btn => {
-                btn.disabled = locked;
-                btn.classList.toggle('btn-disabled', locked);
-            });
-        }
-
-        function setAutoModeMessage(message) {
-            if (autoModeStatusEl) {
-                autoModeStatusEl.textContent = message;
-            }
+            updateUIForCurrentItem();
         }
 
         async function handleAutoGenerateAll() {
             if (isAutoGenerating) {
+                autoStopRequested = true;
                 isAutoGenerating = false;
-                setAutoModeMessage('Stopping auto mode after current item...');
-                updateStatus('Stopping auto generation...', 'info');
+                setAutoModeMessage('Stopping batch after the current clip...');
+                updateStatus('Stopping batch generation...', 'info');
                 return;
             }
 
-            if (getTotalItems() === 0) {
-                updateStatus('Load a file before auto generating.', 'error');
+            if (generationQueue.length === 0) {
+                updateStatus('Load a file before generating everything.', 'error');
                 return;
             }
 
@@ -1428,92 +1586,207 @@
                 return;
             }
 
-            isAutoGenerating = true;
-            setAutoGenerateButtonState(true);
-            setAutoModeMessage('Auto mode running. You can stop anytime.');
-            setManualButtonsLocked(true);
-            ensureValidPosition();
-            updateUIForCurrentItem();
-            updateStatus('Auto generation started...', 'loading');
+            const missingIndexes = generationQueue
+                .map((item, index) => (item && !item.audioBlob ? index : -1))
+                .filter(index => index !== -1);
 
-            while (isAutoGenerating && currentRowIndex < allRows.length) {
-                const totalItems = getTotalItems();
-                const processed = getProcessedItemCount();
-                setAutoModeMessage(`Auto generating item ${Math.min(processed + 1, totalItems)} of ${totalItems}...`);
-                const currentItem = allRows[currentRowIndex];
-                const currentLabel = getContentAt(currentItem, currentSentenceIndex) || currentItem.word || `Entry ${currentRowIndex + 1}`;
+            if (missingIndexes.length === 0) {
+                currentQueueIndex = 0;
+                updateUIForCurrentItem();
+                setAutoModeMessage('All clips are already generated. Review them and flag anything that sounds wrong.');
+                updateStatus('Everything is already generated. Start reviewing from the top.', 'info');
+                return;
+            }
+
+            isAutoGenerating = true;
+            autoStopRequested = false;
+            setAutoGenerateButtonState(true);
+            updateReviewSummary();
+            updateActionButtons();
+            setAutoModeMessage('Generating missing audio. Review starts after the batch finishes.');
+            updateStatus(`Generating ${missingIndexes.length} clip${missingIndexes.length === 1 ? '' : 's'}...`, 'loading');
+
+            let failedCount = 0;
+
+            for (let position = 0; position < missingIndexes.length && isAutoGenerating; position++) {
+                const targetIndex = missingIndexes[position];
+                currentQueueIndex = targetIndex;
+                updateUIForCurrentItem();
+                setAutoModeMessage(`Generating clip ${position + 1} of ${missingIndexes.length}...`);
 
                 const success = await processGeneration(false, {
                     skipPlayback: true,
                     silentStatus: true,
                     manageLoadingState: false,
-                    updateButtonState: false
+                    targetIndex
                 });
 
-                if (!isAutoGenerating) {
-                    break;
-                }
-
-                if (success && lastGeneratedBlob) {
-                    handleApprove({ silent: true });
-                } else {
-                    updateStatus(`Auto generation failed for "${currentLabel}". Skipping.`, 'error');
-                    moveToNextItem();
+                if (!success) {
+                    failedCount += 1;
                 }
 
                 await sleep(AUTO_GENERATE_DELAY_MS);
             }
 
-            const finished = currentRowIndex >= allRows.length;
+            const stopped = autoStopRequested;
             isAutoGenerating = false;
+            autoStopRequested = false;
             setAutoGenerateButtonState(false);
-            setManualButtonsLocked(false);
+            currentQueueIndex = 0;
             updateUIForCurrentItem();
-            setAutoModeMessage(finished
-                ? 'Auto generation finished. Download the ZIP when ready.'
-                : 'Auto mode stopped.');
-            updateStatus(finished ? 'Auto generation complete.' : 'Auto generation stopped.', finished ? 'success' : 'info');
-            updateCreditEstimate();
-        }
 
-        function moveToNextItem() {
-            if (allRows.length === 0) return;
-
-            const currentItem = allRows[currentRowIndex];
-            const contentLength = getContentLength(currentItem);
-
-            if (contentLength === 0) {
-                currentRowIndex++;
-                currentSentenceIndex = 0;
-            } else {
-                currentSentenceIndex++;
-                if (currentSentenceIndex >= contentLength) {
-                    currentRowIndex++;
-                    currentSentenceIndex = 0;
-                }
-            }
-
-            ensureValidPosition();
-            updateUIForCurrentItem();
-        }
-
-        async function downloadZip() {
-            if (approvedAudioBlobs.size === 0) {
-                updateStatus('No approved audio files to download.', 'error');
+            if (stopped) {
+                setAutoModeMessage('Batch stopped. You can continue reviewing or run Generate All again.');
+                updateStatus('Batch generation stopped.', 'info');
                 return;
             }
+
+            if (failedCount > 0) {
+                setAutoModeMessage('Batch finished with some missing clips. Review what was generated, then retry the rest.');
+                updateStatus(`Batch generation finished with ${failedCount} failure${failedCount === 1 ? '' : 's'}.`, 'info');
+                return;
+            }
+
+            setAutoModeMessage('Generation finished. Review clips one by one and flag anything that sounds wrong.');
+            updateStatus('Batch generation complete. Start reviewing from the top.', 'success');
+        }
+
+        async function handleRegenerateFlagged() {
+            if (generationQueue.length === 0) {
+                updateStatus('Load a file before regenerating flagged clips.', 'error');
+                return;
+            }
+
+            const activeAccount = getSelectedAccount();
+            if (!activeAccount || !activeAccount.apiKey) {
+                updateStatus('Select an API account with a valid key before regenerating flagged clips.', 'error');
+                return;
+            }
+
+            const flaggedIndexes = generationQueue
+                .map((item, index) => (item && item.audioBlob && item.reviewStatus === 'flagged' ? index : -1))
+                .filter(index => index !== -1);
+
+            if (flaggedIndexes.length === 0) {
+                updateStatus('No flagged clips available to regenerate.', 'error');
+                return;
+            }
+
+            isAutoGenerating = true;
+            autoStopRequested = false;
+            setAutoGenerateButtonState(true);
+            updateReviewSummary();
+            updateActionButtons();
+            setAutoModeMessage('Regenerating flagged clips. They stay flagged until you clear them.');
+            updateStatus(`Regenerating ${flaggedIndexes.length} flagged clip${flaggedIndexes.length === 1 ? '' : 's'}...`, 'loading');
+
+            let failedCount = 0;
+
+            for (let position = 0; position < flaggedIndexes.length && isAutoGenerating; position++) {
+                const targetIndex = flaggedIndexes[position];
+                currentQueueIndex = targetIndex;
+                updateUIForCurrentItem();
+                setAutoModeMessage(`Regenerating flagged clip ${position + 1} of ${flaggedIndexes.length}...`);
+
+                const success = await processGeneration(true, {
+                    skipPlayback: true,
+                    silentStatus: true,
+                    manageLoadingState: false,
+                    targetIndex
+                });
+
+                if (!success) {
+                    failedCount += 1;
+                }
+
+                await sleep(AUTO_GENERATE_DELAY_MS);
+            }
+
+            const stopped = autoStopRequested;
+            isAutoGenerating = false;
+            autoStopRequested = false;
+            setAutoGenerateButtonState(false);
+            currentQueueIndex = flaggedIndexes[0] || 0;
+            updateUIForCurrentItem();
+
+            if (stopped) {
+                setAutoModeMessage('Flagged regeneration stopped. Review whatever has already been refreshed.');
+                updateStatus('Flagged regeneration stopped.', 'info');
+                return;
+            }
+
+            if (failedCount > 0) {
+                setAutoModeMessage('Some flagged clips could not be regenerated. Review the ones that did refresh.');
+                updateStatus(`Flagged regeneration finished with ${failedCount} failure${failedCount === 1 ? '' : 's'}.`, 'info');
+                return;
+            }
+
+            setAutoModeMessage('Flagged clips regenerated. Listen again and clear the flags when ready.');
+            updateStatus('Flagged clips regenerated. Review them again.', 'success');
+        }
+
+        function appendDuplicateSuffix(path, occurrence) {
+            if (occurrence <= 1) return path;
+            const dotIndex = path.lastIndexOf('.');
+            if (dotIndex === -1) {
+                return `${path}__${occurrence}`;
+            }
+            return `${path.slice(0, dotIndex)}__${occurrence}${path.slice(dotIndex)}`;
+        }
+
+        function buildZipEntries(items) {
+            const seenPaths = new Map();
+
+            return items
+                .filter(item => item && item.audioBlob)
+                .map(item => {
+                    const basePath = getItemZipPath(item);
+                    const occurrence = (seenPaths.get(basePath) || 0) + 1;
+                    seenPaths.set(basePath, occurrence);
+                    return {
+                        path: appendDuplicateSuffix(basePath, occurrence),
+                        blob: item.audioBlob
+                    };
+                });
+        }
+
+        async function downloadItemsAsZip(items, fileName, emptyMessage, successMessage) {
+            if (!items.length) {
+                updateStatus(emptyMessage, 'error');
+                return;
+            }
+
             updateStatus('Creating ZIP file... please wait.', 'loading');
             const zip = new JSZip();
-            approvedAudioBlobs.forEach((blob, filename) => {
-                zip.file(filename, blob);
+            buildZipEntries(items).forEach(entry => {
+                zip.file(entry.path, entry.blob);
             });
+
             try {
-                const content = await zip.generateAsync({ type: "blob" });
-                saveAs(content, "anki_audio_files.zip");
-                updateStatus('ZIP file downloaded successfully!', 'success');
+                const content = await zip.generateAsync({ type: 'blob' });
+                saveAs(content, fileName);
+                updateStatus(successMessage, 'success');
             } catch (error) {
                 updateStatus(`Error creating ZIP: ${error.message}`, 'error');
             }
+        }
+
+        async function downloadReadyZip() {
+            await downloadItemsAsZip(
+                getReadyItems(),
+                'anki_audio_files.zip',
+                'No ready audio files to download.',
+                'Ready ZIP downloaded successfully!'
+            );
+        }
+
+        async function downloadFlaggedZip() {
+            await downloadItemsAsZip(
+                getFlaggedItems(),
+                'anki_flagged_audio_files.zip',
+                'No flagged audio files to download.',
+                'Flagged ZIP downloaded successfully!'
+            );
         }
 
         // --- UI Helper Functions ---
@@ -1526,47 +1799,10 @@
             if (type === 'info') statusLog.classList.add('text-yellow-400');
         }
 
-        function updateButtons(isGenerated) {
-            generateBtn.disabled = isGenerated;
-            generateBtn.classList.toggle('btn-disabled', isGenerated);
-            regenerateBtn.disabled = !isGenerated;
-            regenerateBtn.classList.toggle('btn-disabled', !isGenerated);
-            approveBtn.disabled = !isGenerated;
-            approveBtn.classList.toggle('btn-disabled', !isGenerated);
-        }
-
-        function disableAllActionButtons() {
-            [generateBtn, regenerateBtn, approveBtn, skipBtn].forEach(btn => {
-                btn.disabled = true;
-                btn.classList.add('btn-disabled');
-            });
-        }
-
-        function setLoadingState(isLoading) {
-            if (isLoading) {
-                generateBtn.innerHTML = `<div class="spinner w-5 h-5 mx-auto border-2 border-gray-400 rounded-full"></div>`;
-                generateBtn.disabled = true;
-                generateBtn.classList.add('btn-disabled');
-            } else {
-                generateBtn.innerHTML = 'Generate<kbd>G</kbd>';
-            }
-        }
-
-        function updateProgress() {
-            const totalItems = getTotalItems();
-            if (totalItems === 0) {
-                progressCounter.textContent = '0 / 0';
-                progressBar.style.width = '0%';
-                return;
-            }
-
-            const processedItems = Math.min(getProcessedItemCount(), totalItems);
-            const displayCurrent = Math.min(processedItems + 1, totalItems);
-
-            progressCounter.textContent = `${displayCurrent} / ${totalItems}`;
-            const percentage = (processedItems / totalItems) * 100;
-            progressBar.style.width = `${percentage}%`;
-        }
+        startBalanceAutoRefresh();
+        setAutoGenerateButtonState(false);
+        setAutoModeMessage('Uses your selected voice, model, and generation mode, without auto-approving.');
+        updateUIForCurrentItem();
     </script>
 </body>
 
