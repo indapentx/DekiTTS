@@ -230,11 +230,23 @@
             <div class="bg-gray-900/50 p-6 rounded-xl border border-gray-700 text-center space-y-4">
                 <div>
                     <p class="text-sm text-gray-400">Current Word</p>
-                    <h2 id="currentWord" class="text-2xl font-bold text-indigo-400">-</h2>
+                    <h2
+                        id="currentWord"
+                        class="inline-block rounded px-2 py-1 text-2xl font-bold text-indigo-400 transition hover:text-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 cursor-pointer"
+                        role="button"
+                        tabindex="0"
+                        title="Tap to copy"
+                    >-</h2>
                 </div>
                 <div>
                     <p id="currentTextLabel" class="text-sm text-gray-400">Sentence to Generate</p>
-                    <p id="currentText" class="text-lg font-medium text-gray-100">-</p>
+                    <p
+                        id="currentText"
+                        class="rounded px-2 py-1 text-lg font-medium text-gray-100 transition hover:text-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 cursor-pointer"
+                        role="button"
+                        tabindex="0"
+                        title="Tap to copy"
+                    >-</p>
                 </div>
                 <p id="currentItemStatus" class="text-sm text-gray-500">Not generated yet.</p>
                 <audio id="audioPlayer" controls class="w-full mt-4 hidden"></audio>
@@ -288,7 +300,7 @@
             </div>
 
             <!-- Download Section -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4">
                 <button id="downloadZipBtn"
                     class="w-full bg-gray-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-transform transform hover:scale-105 btn-disabled"
                     disabled>
@@ -298,6 +310,11 @@
                     class="w-full bg-amber-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 transition-transform transform hover:scale-105 btn-disabled"
                     disabled>
                     Download Flagged ZIP (<span id="flaggedZipCount">0</span> files)
+                </button>
+                <button id="downloadFlaggedTxtBtn"
+                    class="w-full bg-orange-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-transform transform hover:scale-105 btn-disabled"
+                    disabled>
+                    Download Flagged TXT (<span id="flaggedTxtCount">0</span> cards)
                 </button>
                 <button id="regenerateFlaggedBtn"
                     class="w-full bg-pink-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 transition-transform transform hover:scale-105 btn-disabled"
@@ -399,9 +416,11 @@
         const nextBtn = document.getElementById('nextBtn');
         const downloadZipBtn = document.getElementById('downloadZipBtn');
         const downloadFlaggedBtn = document.getElementById('downloadFlaggedBtn');
+        const downloadFlaggedTxtBtn = document.getElementById('downloadFlaggedTxtBtn');
         const regenerateFlaggedBtn = document.getElementById('regenerateFlaggedBtn');
         const zipCount = document.getElementById('zipCount');
         const flaggedZipCount = document.getElementById('flaggedZipCount');
+        const flaggedTxtCount = document.getElementById('flaggedTxtCount');
         const regenerateFlaggedCount = document.getElementById('regenerateFlaggedCount');
         const generationModeRadios = document.querySelectorAll('input[name="generationMode"]');
         const accountListEl = document.getElementById('accountList');
@@ -437,6 +456,7 @@
         nextBtn.addEventListener('click', moveToNextItem);
         downloadZipBtn.addEventListener('click', downloadReadyZip);
         downloadFlaggedBtn.addEventListener('click', downloadFlaggedZip);
+        downloadFlaggedTxtBtn.addEventListener('click', downloadFlaggedTxt);
         regenerateFlaggedBtn.addEventListener('click', handleRegenerateFlagged);
         autoGenerateBtn.addEventListener('click', handleAutoGenerateAll);
         window.addEventListener('keydown', handleKeyPress, true);
@@ -506,9 +526,12 @@
         function sanitizeFilenamePart(value) {
             if (!value) return 'entry';
             const cleaned = value
-                .replace(/[^A-Za-z0-9 _-]/g, '')
+                .normalize('NFC')
+                // Keep readable Unicode names, but strip reserved path characters.
+                .replace(/[\u0000-\u001F<>:"/\\|?*]/g, ' ')
+                .replace(/\s+/g, ' ')
                 .trim()
-                .replace(/\s+/g, '_');
+                .replace(/[. ]+$/g, '');
             return cleaned || 'entry';
         }
 
@@ -786,7 +809,7 @@
         }
 
         function createQueueItem(row, rowIndex, contentType, text, sentencePosition = 0, sentenceTotal = 0) {
-            const rawBaseName = row.word || `entry_${rowIndex + 1}`;
+            const rawBaseName = row.word || `entry ${rowIndex + 1}`;
             const sanitizedBase = sanitizeFilenamePart(rawBaseName);
             const suffix = contentType === 'sentence' && sentenceTotal > 1 && sentencePosition > 1
                 ? String(sentencePosition)
@@ -920,6 +943,7 @@
                 autoGenerateBtn,
                 downloadZipBtn,
                 downloadFlaggedBtn,
+                downloadFlaggedTxtBtn,
                 regenerateFlaggedBtn
             ];
         }
@@ -1029,6 +1053,22 @@
             return generationQueue.filter(item => item && item.audioBlob && item.reviewStatus === 'flagged');
         }
 
+        function getFlaggedRows() {
+            const seenRowIndexes = new Set();
+            const flaggedRows = [];
+
+            getFlaggedItems().forEach(item => {
+                if (!item || seenRowIndexes.has(item.rowIndex)) return;
+                seenRowIndexes.add(item.rowIndex);
+                const row = allRows[item.rowIndex];
+                if (row) {
+                    flaggedRows.push(row);
+                }
+            });
+
+            return flaggedRows;
+        }
+
         function getSelectedAccountRemainingCredits() {
             if (!selectedAccountId) return null;
             const elements = accountElements.get(selectedAccountId);
@@ -1127,18 +1167,21 @@
                 reviewHintEl.textContent = `${summary.pendingGeneration} clip${summary.pendingGeneration === 1 ? '' : 's'} still need generation. Use Generate All or work through them manually.`;
             } else if (summary.flagged > 0) {
                 reviewSummaryEl.textContent = `${summary.generated} generated / ${summary.total} total · ${summary.approved} approved · ${summary.flagged} flagged`;
-                reviewHintEl.textContent = 'Everything is generated. Review flagged clips again, regenerate them, or export the flagged ZIP.';
+                reviewHintEl.textContent = 'Everything is generated. Review flagged clips again, regenerate them, or export the flagged ZIP/TXT.';
             } else {
                 reviewSummaryEl.textContent = `${summary.generated} generated / ${summary.total} total · ${summary.approved} approved · 0 flagged`;
                 reviewHintEl.textContent = 'Everything is generated. Use Previous and Next to review and flag anything that sounds wrong.';
             }
 
+            const flaggedRowCount = getFlaggedRows().length;
             zipCount.textContent = summary.ready;
             flaggedZipCount.textContent = summary.flagged;
+            flaggedTxtCount.textContent = flaggedRowCount;
             regenerateFlaggedCount.textContent = summary.flagged;
 
             setButtonDisabled(downloadZipBtn, controlsLocked || summary.ready === 0);
             setButtonDisabled(downloadFlaggedBtn, controlsLocked || summary.flagged === 0);
+            setButtonDisabled(downloadFlaggedTxtBtn, controlsLocked || flaggedRowCount === 0);
             setButtonDisabled(regenerateFlaggedBtn, controlsLocked || summary.flagged === 0);
             setButtonDisabled(autoGenerateBtn, Boolean(loadingButtonKey) || (!isAutoGenerating && summary.total === 0));
         }
@@ -1210,6 +1253,8 @@
                     : (generationMode === 'sentences'
                         ? 'Load an export with example sentences in the fourth column.'
                         : 'Load an export with vocabulary terms in the second column and example sentences in the fourth column.');
+                setCopyPayload(currentWordEl, '', 'Current word');
+                setCopyPayload(currentTextEl, '', currentTextLabelEl.textContent);
                 updateCurrentItemStatus(null);
                 clearAudioPlayer();
                 updateProgress();
@@ -1224,6 +1269,8 @@
             currentTextLabelEl.textContent = currentItem.contentType === 'sentence' ? 'Sentence to Review' : 'Word to Review';
             currentWordEl.textContent = getItemDisplayWord(currentItem);
             currentTextEl.textContent = currentItem.text || '-';
+            setCopyPayload(currentWordEl, currentItem.word || getItemDisplayWord(currentItem), 'Current word');
+            setCopyPayload(currentTextEl, currentItem.text || '', currentTextLabelEl.textContent);
             updateCurrentItemStatus(currentItem);
 
             if (currentItem.audioBlob) {
@@ -1340,6 +1387,7 @@
             const lines = content.split('\n');
 
             lines.forEach(line => {
+                const originalLine = line.replace(/\r$/, '');
                 const columns = line.split('\t');
                 if (columns.length < 2) return;
 
@@ -1351,7 +1399,7 @@
                     : [];
 
                 if (!word) return;
-                rows.push({ word, sentences, sourceName, sourceFolder });
+                rows.push({ word, sentences, sourceName, sourceFolder, originalLine });
             });
 
             return rows;
@@ -1820,7 +1868,96 @@
             );
         }
 
+        async function downloadFlaggedTxt() {
+            const flaggedRows = getFlaggedRows();
+            if (!flaggedRows.length) {
+                updateStatus('No flagged cards available to download.', 'error');
+                return;
+            }
+
+            const lines = flaggedRows
+                .map(row => typeof row.originalLine === 'string' ? row.originalLine : '')
+                .filter(line => line.length > 0);
+
+            if (!lines.length) {
+                updateStatus('Flagged cards are missing their original text rows.', 'error');
+                return;
+            }
+
+            const content = new Blob([lines.join('\n')], { type: 'text/tab-separated-values;charset=utf-8' });
+            saveAs(content, 'anki_flagged_cards.txt');
+            updateStatus('Flagged TXT downloaded successfully!', 'success');
+        }
+
         // --- UI Helper Functions ---
+        function setCopyPayload(element, text, label) {
+            if (!element) return;
+            const normalizedText = typeof text === 'string' ? text.trim() : '';
+            element.dataset.copyText = normalizedText;
+            element.dataset.copyLabel = label || 'Text';
+            element.setAttribute('aria-label', normalizedText ? `${label}. Tap to copy.` : `${label}.`);
+        }
+
+        async function writeTextToClipboard(text) {
+            if (navigator.clipboard?.writeText) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    return;
+                } catch (error) {
+                    /* fall back to execCommand below */
+                }
+            }
+
+            const helper = document.createElement('textarea');
+            helper.value = text;
+            helper.setAttribute('readonly', '');
+            helper.style.position = 'fixed';
+            helper.style.top = '-9999px';
+            helper.style.left = '-9999px';
+            document.body.appendChild(helper);
+            helper.focus();
+            helper.select();
+            helper.setSelectionRange(0, helper.value.length);
+
+            const copied = document.execCommand('copy');
+            document.body.removeChild(helper);
+
+            if (!copied) {
+                throw new Error('Clipboard access is not available.');
+            }
+        }
+
+        async function copyReviewText(element) {
+            if (!element) return;
+
+            const text = element.dataset.copyText || '';
+            const label = element.dataset.copyLabel || 'Text';
+
+            if (!text) {
+                updateStatus(`No ${label.toLowerCase()} available to copy.`, 'info');
+                return;
+            }
+
+            try {
+                await writeTextToClipboard(text);
+                updateStatus(`${label} copied.`, 'success');
+            } catch (error) {
+                updateStatus(`Could not copy ${label.toLowerCase()}: ${error.message}`, 'error');
+            }
+        }
+
+        function bindCopyTarget(element) {
+            if (!element) return;
+
+            element.addEventListener('click', () => copyReviewText(element));
+            element.addEventListener('keydown', event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    copyReviewText(element);
+                }
+            });
+        }
+
         function updateStatus(message, type = 'info') {
             statusLog.textContent = message;
             statusLog.classList.remove('text-red-500', 'text-green-500', 'text-blue-500', 'text-yellow-400');
@@ -1830,6 +1967,8 @@
             if (type === 'info') statusLog.classList.add('text-yellow-400');
         }
 
+        bindCopyTarget(currentWordEl);
+        bindCopyTarget(currentTextEl);
         getShortcutTrapElements().forEach(element => {
             if (!element) return;
             element.addEventListener('pointerup', () => scheduleShortcutFocusRelease(element));
