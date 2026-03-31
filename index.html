@@ -978,6 +978,28 @@
             }
         }
 
+        function replayCurrentAudio() {
+            const currentItem = getCurrentQueueItem();
+            if (!currentItem || !currentItem.audioBlob) {
+                updateStatus('Generate audio before replaying it.', 'error');
+                return;
+            }
+
+            const currentBlobLoaded = lastGeneratedBlob === currentItem.audioBlob && Boolean(audioPlayer.src);
+            if (currentBlobLoaded) {
+                audioPlayer.pause();
+                audioPlayer.currentTime = 0;
+                audioPlayer.classList.remove('hidden');
+                audioPlayer.play().catch(() => { /* ignore autoplay issues */ });
+                return;
+            }
+
+            setAudioPlayerBlob(currentItem.audioBlob, {
+                autoplay: true,
+                showPlayer: true
+            });
+        }
+
         function getQueueSummary() {
             const summary = {
                 total: generationQueue.length,
@@ -1313,6 +1335,14 @@
                 scheduleShortcutFocusRelease();
                 button.click();
             };
+
+            if (event.code === 'Space') {
+                event.preventDefault();
+                scheduleShortcutFocusRelease();
+                replayCurrentAudio();
+                return;
+            }
+
             const key = event.key.toLowerCase();
             switch (key) {
                 case 'p':
