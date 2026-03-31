@@ -117,7 +117,7 @@
                     <label for="modelModeV2"
                         class="flex items-start space-x-3 bg-gray-900/60 p-4 rounded-lg border border-gray-700 cursor-pointer">
                         <input type="radio" name="modelMode" id="modelModeV2" value="eleven_multilingual_v2"
-                            class="mt-1.5 h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500" checked>
+                            class="mt-1.5 h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500">
                         <div>
                             <p class="text-sm font-semibold text-gray-200">Multilingual v2 (Stable)</p>
                             <p class="text-xs text-gray-400 mb-2">Current production-ready model from ElevenLabs.</p>
@@ -129,7 +129,7 @@
                     <label for="modelModeV3"
                         class="flex items-start space-x-3 bg-gray-900/60 p-4 rounded-lg border border-gray-700 cursor-pointer">
                         <input type="radio" name="modelMode" id="modelModeV3" value="eleven_v3"
-                            class="mt-1.5 h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500">
+                            class="mt-1.5 h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500" checked>
                         <div>
                             <p class="text-sm font-semibold text-gray-200">Eleven v3 Alpha (Latest)</p>
                             <p class="text-xs text-gray-400 mb-2">Experimental alpha release with the newest upgrades.
@@ -381,7 +381,7 @@
             voiceA: 'de',
             voiceB: 'en'
         };
-        const DEFAULT_TTS_MODEL_ID = 'eleven_multilingual_v2';
+        const DEFAULT_TTS_MODEL_ID = 'eleven_v3';
         const BALANCE_REFRESH_INTERVAL_MS = 60000;
         const AUTO_GENERATE_DELAY_MS = 10;
         const BUTTON_LABELS = {
@@ -1505,13 +1505,16 @@
                 return false;
             }
 
+            const selectedModelId = getSelectedModelId();
+            const stability = selectedModelId === 'eleven_v3' && targetItem.contentType === 'word' ? 1 : 0.5;
+
             const payload = {
                 text: targetItem.contentType === 'word'
                     ? ensureTrailingPeriodForWord(textToGenerate)
                     : textToGenerate,
-                model_id: getSelectedModelId(),
+                model_id: selectedModelId,
                 voice_settings: {
-                    stability: 0.5,
+                    stability,
                     similarity_boost: 0.75,
                     style: 0.0,
                     use_speaker_boost: true,
