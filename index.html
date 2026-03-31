@@ -1506,7 +1506,9 @@
             }
 
             const selectedModelId = getSelectedModelId();
-            const stability = selectedModelId === 'eleven_v3' && targetItem.contentType === 'word' ? 1 : 0.5;
+            const stability = targetItem.contentType === 'word'
+                ? (selectedModelId === 'eleven_v3' ? 1 : (selectedModelId === 'eleven_multilingual_v2' ? 0.75 : 0.5))
+                : 0.5;
 
             const payload = {
                 text: targetItem.contentType === 'word'
