@@ -382,7 +382,6 @@
             voiceB: 'en'
         };
         const DEFAULT_TTS_MODEL_ID = 'eleven_v3';
-        const V3_WORD_AUDIO_TAG = '[calm]';
         const BALANCE_REFRESH_INTERVAL_MS = 60000;
         const AUTO_GENERATE_DELAY_MS = 10;
         const BUTTON_LABELS = {
@@ -424,7 +423,6 @@
         const flaggedTxtCount = document.getElementById('flaggedTxtCount');
         const regenerateFlaggedCount = document.getElementById('regenerateFlaggedCount');
         const generationModeRadios = document.querySelectorAll('input[name="generationMode"]');
-        const modelModeRadios = document.querySelectorAll('input[name="modelMode"]');
         const accountListEl = document.getElementById('accountList');
         const accountMessageEl = document.getElementById('accountMessage');
         const autoGenerateBtn = document.getElementById('autoGenerateBtn');
@@ -464,9 +462,6 @@
         window.addEventListener('keydown', handleKeyPress, true);
         generationModeRadios.forEach(radio => {
             radio.addEventListener('change', handleGenerationModeChange);
-        });
-        modelModeRadios.forEach(radio => {
-            radio.addEventListener('change', updateCreditEstimate);
         });
 
         const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -813,13 +808,6 @@
             return /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
         }
 
-        function formatWordTextForTts(text, modelId) {
-            const normalized = ensureTrailingPeriodForWord(text);
-            if (!normalized) return '';
-            if (modelId !== 'eleven_v3') return normalized;
-            return /^\[calm\]\s*/i.test(normalized) ? normalized : `${V3_WORD_AUDIO_TAG} ${normalized}`;
-        }
-
         function createQueueItem(row, rowIndex, contentType, text, sentencePosition = 0, sentenceTotal = 0) {
             const rawBaseName = row.word || `entry ${rowIndex + 1}`;
             const sanitizedBase = sanitizeFilenamePart(rawBaseName);
@@ -1019,7 +1007,6 @@
         }
 
         function computePendingCharacterStats() {
-            const selectedModelId = getSelectedModelId();
             const stats = {
                 totalChars: 0,
                 wordChars: 0,
@@ -1036,7 +1023,7 @@
 
                 let cleaned = (item.text || '').trim();
                 if (item.contentType === 'word') {
-                    cleaned = formatWordTextForTts(cleaned, selectedModelId);
+                    cleaned = ensureTrailingPeriodForWord(cleaned);
                 }
                 if (!cleaned) return;
 
@@ -1523,7 +1510,7 @@
 
             const payload = {
                 text: targetItem.contentType === 'word'
-                    ? formatWordTextForTts(textToGenerate, selectedModelId)
+                    ? ensureTrailingPeriodForWord(textToGenerate)
                     : textToGenerate,
                 model_id: selectedModelId,
                 voice_settings: {
@@ -1641,7 +1628,7 @@
         }
 
         function toggleFlagForCurrentItem(options = {}) {
-            const { silent = false } = options;
+            const { silent = false, advance = true } = options;
             const currentItem = getCurrentQueueItem();
 
             if (!currentItem || !currentItem.audioBlob) {
@@ -1658,7 +1645,12 @@
                 updateStatus(isFlagged ? 'Flag cleared for the current clip.' : 'Current clip flagged for follow-up.', 'info');
             }
 
-            updateUIForCurrentItem();
+            const shouldAdvance = advance && !isFlagged && currentQueueIndex < generationQueue.length - 1;
+            if (shouldAdvance) {
+                currentQueueIndex += 1;
+            }
+
+            updateUIForCurrentItem({ autoplayAudio: shouldAdvance });
         }
 
         async function handleAutoGenerateAll() {
