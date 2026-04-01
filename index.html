@@ -144,8 +144,8 @@
             <div class="mt-6">
                 <div class="text-center">
                     <span class="block text-sm font-medium text-gray-400 mb-2">4. Choose What to Generate</span>
-                    <p class="text-xs text-gray-500">Switch between example sentences, single-word pronunciations, or
-                        alternating both.</p>
+                    <p class="text-xs text-gray-500">Switch between example sentences, single-word pronunciations, or a
+                        prompted word format.</p>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <label for="generationModeSentences"
@@ -168,14 +168,14 @@
                                 one clip per card.</p>
                         </div>
                     </label>
-                    <label for="generationModeBoth"
+                    <label for="generationModePromptedWords"
                         class="flex items-start space-x-3 bg-gray-900/60 p-4 rounded-lg border border-gray-700 cursor-pointer">
-                        <input type="radio" name="generationMode" id="generationModeBoth" value="both"
+                        <input type="radio" name="generationMode" id="generationModePromptedWords" value="promptedWords"
                             class="mt-1.5 h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500">
                         <div>
-                            <p class="text-sm font-semibold text-gray-200">Word + Sentence Loop</p>
-                            <p class="text-xs text-gray-400">Generate the term first, then each example sentence before
-                                moving to the next card.</p>
+                            <p class="text-sm font-semibold text-gray-200">Prompted Words</p>
+                            <p class="text-xs text-gray-400">Generate one clip per vocabulary term using the prompt
+                                <span class="font-mono text-gray-300">Das Wort ist: &lt;word&gt;.</span></p>
                         </div>
                     </label>
                 </div>
@@ -384,6 +384,7 @@
         const DEFAULT_TTS_MODEL_ID = 'eleven_v3';
         const BALANCE_REFRESH_INTERVAL_MS = 60000;
         const AUTO_GENERATE_DELAY_MS = 10;
+        const PROMPTED_WORD_PREFIX = 'Das Wort ist:';
         const BUTTON_LABELS = {
             previous: 'Previous<kbd>P</kbd>',
             generate: 'Generate<kbd>G</kbd>',
@@ -808,13 +809,68 @@
             return /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
         }
 
+        function isWordContentType(contentType) {
+            return contentType === 'word' || contentType === 'prompted-word';
+        }
+
+        function buildPromptedWordText(text) {
+            const normalized = (text || '').trim().replace(/[.!?]+$/, '');
+            if (!normalized) return '';
+            return `${PROMPTED_WORD_PREFIX} ${normalized}.`;
+        }
+
+        function getGenerationTextForItem(item) {
+            if (!item) return '';
+
+            const rawText = (item.text || '').trim();
+            if (!rawText) return '';
+
+            if (item.contentType === 'prompted-word') {
+                return buildPromptedWordText(rawText);
+            }
+
+            if (item.contentType === 'word') {
+                return ensureTrailingPeriodForWord(rawText);
+            }
+
+            return rawText;
+        }
+
+        function getModeReviewLabel(mode) {
+            if (mode === 'sentences') return 'Sentence to Review';
+            if (mode === 'promptedWords') return 'Prompted Word to Review';
+            return 'Word to Review';
+        }
+
+        function getEmptyModeReviewText(mode) {
+            if (mode === 'sentences') {
+                return 'Load an export with example sentences in the fourth column.';
+            }
+            return 'Load an export with vocabulary terms in the second column.';
+        }
+
+        function getItemReviewLabel(item) {
+            if (!item) return 'Word to Review';
+            if (item.contentType === 'sentence') return 'Sentence to Review';
+            if (item.contentType === 'prompted-word') return 'Prompted Word to Review';
+            return 'Word to Review';
+        }
+
+        function getItemReviewText(item) {
+            if (!item) return '-';
+            if (item.contentType === 'prompted-word') {
+                return getGenerationTextForItem(item) || '-';
+            }
+            return item.text || '-';
+        }
+
         function createQueueItem(row, rowIndex, contentType, text, sentencePosition = 0, sentenceTotal = 0) {
             const rawBaseName = row.word || `entry ${rowIndex + 1}`;
             const sanitizedBase = sanitizeFilenamePart(rawBaseName);
             const suffix = contentType === 'sentence' && sentenceTotal > 1 && sentencePosition > 1
                 ? String(sentencePosition)
                 : '';
-            const filenameBase = contentType === 'word'
+            const filenameBase = isWordContentType(contentType)
                 ? sanitizedBase
                 : `s_${sanitizedBase}${suffix}`;
 
@@ -841,14 +897,19 @@
             rows.forEach((row, rowIndex) => {
                 if (!row) return;
 
-                if (generationMode === 'words' || generationMode === 'both') {
+                if (generationMode === 'words' || generationMode === 'promptedWords') {
                     const wordText = (row.word || '').trim();
                     if (wordText) {
-                        items.push(createQueueItem(row, rowIndex, 'word', wordText));
+                        items.push(createQueueItem(
+                            row,
+                            rowIndex,
+                            generationMode === 'promptedWords' ? 'prompted-word' : 'word',
+                            wordText
+                        ));
                     }
                 }
 
-                if (generationMode === 'sentences' || generationMode === 'both') {
+                if (generationMode === 'sentences') {
                     const sentences = getSentenceList(row);
                     sentences.forEach((sentence, sentenceIndex) => {
                         const trimmed = typeof sentence === 'string' ? sentence.trim() : '';
@@ -1048,16 +1109,13 @@
             generationQueue.forEach(item => {
                 if (!item || item.audioBlob) return;
 
-                let cleaned = (item.text || '').trim();
-                if (item.contentType === 'word') {
-                    cleaned = ensureTrailingPeriodForWord(cleaned);
-                }
+                const cleaned = getGenerationTextForItem(item);
                 if (!cleaned) return;
 
                 const charCount = cleaned.length;
                 stats.totalChars += charCount;
 
-                if (item.contentType === 'word') {
+                if (isWordContentType(item.contentType)) {
                     stats.wordChars += charCount;
                     stats.totalWords += 1;
                 } else {
@@ -1276,16 +1334,9 @@
             const { autoplayAudio = false } = options;
 
             if (generationQueue.length === 0) {
-                const label = generationMode === 'words'
-                    ? 'Word to Review'
-                    : (generationMode === 'sentences' ? 'Sentence to Review' : 'Word or Sentence to Review');
-                currentTextLabelEl.textContent = label;
+                currentTextLabelEl.textContent = getModeReviewLabel(generationMode);
                 currentWordEl.textContent = 'No content available';
-                currentTextEl.textContent = generationMode === 'words'
-                    ? 'Load an export with vocabulary terms in the second column.'
-                    : (generationMode === 'sentences'
-                        ? 'Load an export with example sentences in the fourth column.'
-                        : 'Load an export with vocabulary terms in the second column and example sentences in the fourth column.');
+                currentTextEl.textContent = getEmptyModeReviewText(generationMode);
                 setCopyPayload(currentWordEl, '', 'Current word');
                 setCopyPayload(currentTextEl, '', currentTextLabelEl.textContent);
                 updateCurrentItemStatus(null);
@@ -1299,11 +1350,11 @@
 
             clampCurrentQueueIndex();
             const currentItem = getCurrentQueueItem();
-            currentTextLabelEl.textContent = currentItem.contentType === 'sentence' ? 'Sentence to Review' : 'Word to Review';
+            currentTextLabelEl.textContent = getItemReviewLabel(currentItem);
             currentWordEl.textContent = getItemDisplayWord(currentItem);
-            currentTextEl.textContent = currentItem.text || '-';
+            currentTextEl.textContent = getItemReviewText(currentItem);
             setCopyPayload(currentWordEl, currentItem.word || getItemDisplayWord(currentItem), 'Current word');
-            setCopyPayload(currentTextEl, currentItem.text || '', currentTextLabelEl.textContent);
+            setCopyPayload(currentTextEl, getItemReviewText(currentItem) === '-' ? '' : getItemReviewText(currentItem), currentTextLabelEl.textContent);
             updateCurrentItemStatus(currentItem);
 
             if (currentItem.audioBlob) {
@@ -1400,7 +1451,7 @@
                     ? 'Words mode is ready, but no terms were found in the second column.'
                     : (generationMode === 'sentences'
                         ? 'Sentence mode is ready, but no example sentences were found in the fourth column.'
-                        : 'Combined mode is ready, but no terms or example sentences were found.');
+                        : 'Prompted word mode is ready, but no terms were found in the second column.');
                 updateStatus(emptyMessage, 'info');
                 return;
             }
@@ -1409,7 +1460,7 @@
                 ? 'Switched to word pronunciation mode.'
                 : (generationMode === 'sentences'
                     ? 'Switched to example sentence mode.'
-                    : 'Switched to alternating word and sentence mode.');
+                    : 'Switched to prompted word mode.');
             updateStatus(modeMessage, 'info');
         }
 
@@ -1494,7 +1545,7 @@
                     ? 'File loaded, but no vocabulary terms were detected in the second column.'
                     : (generationMode === 'sentences'
                         ? 'File loaded, but no example sentences were detected in the fourth column.'
-                        : 'File loaded, but no vocabulary terms or example sentences were detected in the required columns.');
+                        : 'File loaded, but no vocabulary terms were detected in the second column.');
                 updateStatus(infoMessage, 'info');
             }
         }
@@ -1522,7 +1573,7 @@
                 return false;
             }
 
-            const textToGenerate = (targetItem.text || '').trim();
+            const textToGenerate = getGenerationTextForItem(targetItem);
             if (!textToGenerate) {
                 if (!silentStatus) {
                     updateStatus('Text is empty after trimming.', 'error');
@@ -1547,14 +1598,12 @@
             }
 
             const selectedModelId = getSelectedModelId();
-            const stability = targetItem.contentType === 'word'
+            const stability = isWordContentType(targetItem.contentType)
                 ? (selectedModelId === 'eleven_v3' ? 1 : 0.5)
                 : 0.5;
 
             const payload = {
-                text: targetItem.contentType === 'word'
-                    ? ensureTrailingPeriodForWord(textToGenerate)
-                    : textToGenerate,
+                text: textToGenerate,
                 model_id: selectedModelId,
                 voice_settings: {
                     stability,
