@@ -1006,11 +1006,19 @@
                 generated: 0,
                 approved: 0,
                 flagged: 0,
+                flaggedWithAudio: 0,
                 pendingGeneration: 0,
                 ready: 0
             };
 
             generationQueue.forEach(item => {
+                if (item.reviewStatus === 'flagged') {
+                    summary.flagged += 1;
+                    if (item.audioBlob) {
+                        summary.flaggedWithAudio += 1;
+                    }
+                }
+
                 if (!item.audioBlob) {
                     summary.pendingGeneration += 1;
                     return;
@@ -1019,12 +1027,9 @@
                 if (item.reviewStatus === 'approved') {
                     summary.approved += 1;
                 }
-                if (item.reviewStatus === 'flagged') {
-                    summary.flagged += 1;
-                }
             });
 
-            summary.ready = Math.max(summary.generated - summary.flagged, 0);
+            summary.ready = Math.max(summary.generated - summary.flaggedWithAudio, 0);
             return summary;
         }
 
@@ -1072,6 +1077,10 @@
         }
 
         function getFlaggedItems() {
+            return generationQueue.filter(item => item && item.reviewStatus === 'flagged');
+        }
+
+        function getFlaggedAudioItems() {
             return generationQueue.filter(item => item && item.audioBlob && item.reviewStatus === 'flagged');
         }
 
@@ -1155,15 +1164,17 @@
                 return;
             }
 
-            if (!item.audioBlob) {
-                currentItemStatusEl.classList.add('text-gray-500');
-                currentItemStatusEl.textContent = `Not generated yet. Output file will be ${getItemZipPath(item)}.`;
+            if (item.reviewStatus === 'flagged') {
+                currentItemStatusEl.classList.add('text-amber-400');
+                currentItemStatusEl.textContent = item.audioBlob
+                    ? `Flagged for follow-up. Output file is ${getItemZipPath(item)}.`
+                    : `Flagged for follow-up before generation. Output file will be ${getItemZipPath(item)}.`;
                 return;
             }
 
-            if (item.reviewStatus === 'flagged') {
-                currentItemStatusEl.classList.add('text-amber-400');
-                currentItemStatusEl.textContent = `Flagged for follow-up. Output file is ${getItemZipPath(item)}.`;
+            if (!item.audioBlob) {
+                currentItemStatusEl.classList.add('text-gray-500');
+                currentItemStatusEl.textContent = `Not generated yet. Output file will be ${getItemZipPath(item)}.`;
                 return;
             }
 
@@ -1197,12 +1208,12 @@
 
             const flaggedRowCount = getFlaggedRows().length;
             zipCount.textContent = summary.ready;
-            flaggedZipCount.textContent = summary.flagged;
+            flaggedZipCount.textContent = summary.flaggedWithAudio;
             flaggedTxtCount.textContent = flaggedRowCount;
             regenerateFlaggedCount.textContent = summary.flagged;
 
             setButtonDisabled(downloadZipBtn, controlsLocked || summary.ready === 0);
-            setButtonDisabled(downloadFlaggedBtn, controlsLocked || summary.flagged === 0);
+            setButtonDisabled(downloadFlaggedBtn, controlsLocked || summary.flaggedWithAudio === 0);
             setButtonDisabled(downloadFlaggedTxtBtn, controlsLocked || flaggedRowCount === 0);
             setButtonDisabled(regenerateFlaggedBtn, controlsLocked || summary.flagged === 0);
             setButtonDisabled(autoGenerateBtn, Boolean(loadingButtonKey) || (!isAutoGenerating && summary.total === 0));
@@ -1225,7 +1236,7 @@
             setButtonDisabled(generateBtn, isLocked || !hasItem || hasAudio);
             setButtonDisabled(regenerateBtn, isLocked || !hasAudio);
             setButtonDisabled(approveBtn, isLocked || !hasAudio);
-            setButtonDisabled(flagBtn, isLocked || !hasAudio);
+            setButtonDisabled(flagBtn, isLocked || !hasItem);
             setButtonDisabled(nextBtn, isLocked || !hasItem || currentQueueIndex >= generationQueue.length - 1);
         }
 
@@ -1663,18 +1674,23 @@
             const { silent = false, advance = true } = options;
             const currentItem = getCurrentQueueItem();
 
-            if (!currentItem || !currentItem.audioBlob) {
+            if (!currentItem) {
                 if (!silent) {
-                    updateStatus('Generate audio before flagging it.', 'error');
+                    updateStatus('No item selected to flag.', 'error');
                 }
                 return;
             }
 
             const isFlagged = currentItem.reviewStatus === 'flagged';
-            currentItem.reviewStatus = isFlagged ? 'generated' : 'flagged';
+            currentItem.reviewStatus = isFlagged
+                ? (currentItem.audioBlob ? 'generated' : 'pending')
+                : 'flagged';
 
             if (!silent) {
-                updateStatus(isFlagged ? 'Flag cleared for the current clip.' : 'Current clip flagged for follow-up.', 'info');
+                updateStatus(
+                    isFlagged ? 'Flag cleared for the current item.' : 'Current item flagged for follow-up.',
+                    'info'
+                );
             }
 
             const shouldAdvance = advance && !isFlagged && currentQueueIndex < generationQueue.length - 1;
@@ -1783,7 +1799,7 @@
             }
 
             const flaggedIndexes = generationQueue
-                .map((item, index) => (item && item.audioBlob && item.reviewStatus === 'flagged' ? index : -1))
+                .map((item, index) => (item && item.reviewStatus === 'flagged' ? index : -1))
                 .filter(index => index !== -1);
 
             if (flaggedIndexes.length === 0) {
@@ -1796,18 +1812,19 @@
             setAutoGenerateButtonState(true);
             updateReviewSummary();
             updateActionButtons();
-            setAutoModeMessage('Regenerating flagged clips. They stay flagged until you clear them.');
-            updateStatus(`Regenerating ${flaggedIndexes.length} flagged clip${flaggedIndexes.length === 1 ? '' : 's'}...`, 'loading');
+            setAutoModeMessage('Processing flagged clips. Missing audio will be generated, and existing audio will be refreshed.');
+            updateStatus(`Processing ${flaggedIndexes.length} flagged clip${flaggedIndexes.length === 1 ? '' : 's'}...`, 'loading');
 
             let failedCount = 0;
 
             for (let position = 0; position < flaggedIndexes.length && isAutoGenerating; position++) {
                 const targetIndex = flaggedIndexes[position];
+                const targetItem = generationQueue[targetIndex];
                 currentQueueIndex = targetIndex;
                 updateUIForCurrentItem();
-                setAutoModeMessage(`Regenerating flagged clip ${position + 1} of ${flaggedIndexes.length}...`);
+                setAutoModeMessage(`Processing flagged clip ${position + 1} of ${flaggedIndexes.length}...`);
 
-                const success = await processGeneration(true, {
+                const success = await processGeneration(Boolean(targetItem && targetItem.audioBlob), {
                     skipPlayback: true,
                     silentStatus: true,
                     manageLoadingState: false,
@@ -1829,19 +1846,19 @@
             updateUIForCurrentItem();
 
             if (stopped) {
-                setAutoModeMessage('Flagged regeneration stopped. Review whatever has already been refreshed.');
-                updateStatus('Flagged regeneration stopped.', 'info');
+                setAutoModeMessage('Flagged processing stopped. Review whatever has already been updated.');
+                updateStatus('Flagged processing stopped.', 'info');
                 return;
             }
 
             if (failedCount > 0) {
-                setAutoModeMessage('Some flagged clips could not be regenerated. Review the ones that did refresh.');
-                updateStatus(`Flagged regeneration finished with ${failedCount} failure${failedCount === 1 ? '' : 's'}.`, 'info');
+                setAutoModeMessage('Some flagged clips could not be updated. Review the ones that did finish.');
+                updateStatus(`Flagged processing finished with ${failedCount} failure${failedCount === 1 ? '' : 's'}.`, 'info');
                 return;
             }
 
-            setAutoModeMessage('Flagged clips regenerated. Listen again and clear the flags when ready.');
-            updateStatus('Flagged clips regenerated. Review them again.', 'success');
+            setAutoModeMessage('Flagged clips updated. Listen again and clear the flags when ready.');
+            updateStatus('Flagged clips updated. Review them again.', 'success');
         }
 
         function appendDuplicateSuffix(path, occurrence) {
@@ -1901,7 +1918,7 @@
 
         async function downloadFlaggedZip() {
             await downloadItemsAsZip(
-                getFlaggedItems(),
+                getFlaggedAudioItems(),
                 'anki_flagged_audio_files.zip',
                 'No flagged audio files to download.',
                 'Flagged ZIP downloaded successfully!'
