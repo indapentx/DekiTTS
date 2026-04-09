@@ -306,10 +306,10 @@
                     disabled>
                     Download Ready ZIP (<span id="zipCount">0</span> files)
                 </button>
-                <button id="downloadFlaggedBtn"
-                    class="w-full bg-amber-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 transition-transform transform hover:scale-105 btn-disabled"
+                <button id="downloadApprovedBtn"
+                    class="w-full bg-green-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-transform transform hover:scale-105 btn-disabled"
                     disabled>
-                    Download Flagged ZIP (<span id="flaggedZipCount">0</span> files)
+                    Download Approved ZIP (<span id="approvedZipCount">0</span> files)
                 </button>
                 <button id="downloadFlaggedTxtBtn"
                     class="w-full bg-orange-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-transform transform hover:scale-105 btn-disabled"
@@ -421,11 +421,11 @@
         const flagBtn = document.getElementById('flagBtn');
         const nextBtn = document.getElementById('nextBtn');
         const downloadZipBtn = document.getElementById('downloadZipBtn');
-        const downloadFlaggedBtn = document.getElementById('downloadFlaggedBtn');
+        const downloadApprovedBtn = document.getElementById('downloadApprovedBtn');
         const downloadFlaggedTxtBtn = document.getElementById('downloadFlaggedTxtBtn');
         const regenerateFlaggedBtn = document.getElementById('regenerateFlaggedBtn');
         const zipCount = document.getElementById('zipCount');
-        const flaggedZipCount = document.getElementById('flaggedZipCount');
+        const approvedZipCount = document.getElementById('approvedZipCount');
         const flaggedTxtCount = document.getElementById('flaggedTxtCount');
         const regenerateFlaggedCount = document.getElementById('regenerateFlaggedCount');
         const generationModeRadios = document.querySelectorAll('input[name="generationMode"]');
@@ -461,7 +461,7 @@
         flagBtn.addEventListener('click', () => toggleFlagForCurrentItem());
         nextBtn.addEventListener('click', moveToNextItem);
         downloadZipBtn.addEventListener('click', downloadReadyZip);
-        downloadFlaggedBtn.addEventListener('click', downloadFlaggedZip);
+        downloadApprovedBtn.addEventListener('click', downloadApprovedZip);
         downloadFlaggedTxtBtn.addEventListener('click', downloadFlaggedTxt);
         regenerateFlaggedBtn.addEventListener('click', handleRegenerateFlagged);
         autoGenerateBtn.addEventListener('click', handleAutoGenerateAll);
@@ -814,6 +814,28 @@
             return /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
         }
 
+        function splitWordVariants(text) {
+            if (typeof text !== 'string') return [];
+            return text
+                .split(';')
+                .map(value => value.trim())
+                .filter(Boolean);
+        }
+
+        function getRowWordVariants(row) {
+            if (!row) return [];
+            const variants = Array.isArray(row.wordVariants)
+                ? row.wordVariants.map(value => (typeof value === 'string' ? value.trim() : '')).filter(Boolean)
+                : [];
+
+            if (variants.length > 0) {
+                return variants;
+            }
+
+            const fallback = (row.word || '').trim();
+            return fallback ? [fallback] : [];
+        }
+
         function isWordContentType(contentType) {
             return contentType === 'word' || contentType === 'prompted-word';
         }
@@ -869,8 +891,16 @@
             return item.text || '-';
         }
 
-        function createQueueItem(row, rowIndex, contentType, text, sentencePosition = 0, sentenceTotal = 0) {
-            const rawBaseName = row.word || `entry ${rowIndex + 1}`;
+        function createQueueItem(row, rowIndex, contentType, text, options = {}) {
+            const {
+                sentencePosition = 0,
+                sentenceTotal = 0,
+                wordVariantPosition = 0,
+                wordVariantTotal = 0,
+                wordLabel = ''
+            } = options;
+            const resolvedWordLabel = (wordLabel || (isWordContentType(contentType) ? text : row.word) || `Entry ${rowIndex + 1}`).trim();
+            const rawBaseName = resolvedWordLabel || row.word || `entry ${rowIndex + 1}`;
             const sanitizedBase = sanitizeFilenamePart(rawBaseName);
             const suffix = contentType === 'sentence' && sentenceTotal > 1 && sentencePosition > 1
                 ? String(sentencePosition)
@@ -880,13 +910,16 @@
                 : `s_${sanitizedBase}${suffix}`;
 
             return {
-                id: `${rowIndex}-${contentType}-${contentType === 'sentence' ? sentencePosition : 0}`,
+                id: `${rowIndex}-${contentType}-${contentType === 'sentence' ? sentencePosition : wordVariantPosition || 1}`,
                 rowIndex,
-                word: row.word || `Entry ${rowIndex + 1}`,
+                word: resolvedWordLabel || `Entry ${rowIndex + 1}`,
+                rowWord: row.word || '',
                 text,
                 contentType,
                 sentencePosition,
                 sentenceTotal,
+                wordVariantPosition,
+                wordVariantTotal,
                 sourceName: row.sourceName || '',
                 sourceFolder: row.sourceFolder || '',
                 filename: `${filenameBase}.mp3`,
@@ -903,15 +936,20 @@
                 if (!row) return;
 
                 if (generationMode === 'words' || generationMode === 'promptedWords') {
-                    const wordText = (row.word || '').trim();
-                    if (wordText) {
+                    const wordVariants = getRowWordVariants(row);
+                    wordVariants.forEach((wordText, wordIndex) => {
                         items.push(createQueueItem(
                             row,
                             rowIndex,
                             generationMode === 'promptedWords' ? 'prompted-word' : 'word',
-                            wordText
+                            wordText,
+                            {
+                                wordVariantPosition: wordIndex + 1,
+                                wordVariantTotal: wordVariants.length,
+                                wordLabel: wordText
+                            }
                         ));
-                    }
+                    });
                 }
 
                 if (generationMode === 'sentences') {
@@ -919,7 +957,10 @@
                     sentences.forEach((sentence, sentenceIndex) => {
                         const trimmed = typeof sentence === 'string' ? sentence.trim() : '';
                         if (!trimmed) return;
-                        items.push(createQueueItem(row, rowIndex, 'sentence', trimmed, sentenceIndex + 1, sentences.length));
+                        items.push(createQueueItem(row, rowIndex, 'sentence', trimmed, {
+                            sentencePosition: sentenceIndex + 1,
+                            sentenceTotal: sentences.length
+                        }));
                     });
                 }
             });
@@ -973,6 +1014,9 @@
         function getItemDisplayWord(item) {
             if (!item) return '-';
             let label = item.word || `Entry ${item.rowIndex + 1}`;
+            if (isWordContentType(item.contentType) && item.wordVariantTotal > 1) {
+                label += ` (${item.wordVariantPosition}/${item.wordVariantTotal})`;
+            }
             if (item.contentType === 'sentence' && item.sentenceTotal > 1) {
                 label += ` (${item.sentencePosition}/${item.sentenceTotal})`;
             }
@@ -1008,7 +1052,7 @@
                 nextBtn,
                 autoGenerateBtn,
                 downloadZipBtn,
-                downloadFlaggedBtn,
+                downloadApprovedBtn,
                 downloadFlaggedTxtBtn,
                 regenerateFlaggedBtn
             ];
@@ -1147,6 +1191,10 @@
             return generationQueue.filter(item => item && item.audioBlob && item.reviewStatus === 'flagged');
         }
 
+        function getApprovedAudioItems() {
+            return generationQueue.filter(item => item && item.audioBlob && item.reviewStatus === 'approved');
+        }
+
         function getFlaggedRows() {
             const seenRowIndexes = new Set();
             const flaggedRows = [];
@@ -1263,7 +1311,7 @@
                 reviewHintEl.textContent = `${summary.pendingGeneration} clip${summary.pendingGeneration === 1 ? '' : 's'} still need generation. Use Generate All or work through them manually.`;
             } else if (summary.flagged > 0) {
                 reviewSummaryEl.textContent = `${summary.generated} generated / ${summary.total} total · ${summary.approved} approved · ${summary.flagged} flagged`;
-                reviewHintEl.textContent = 'Everything is generated. Review flagged clips again, regenerate them, or export the flagged ZIP/TXT.';
+                reviewHintEl.textContent = 'Everything is generated. Review flagged clips again, regenerate them, or export the approved ZIP or flagged TXT.';
             } else {
                 reviewSummaryEl.textContent = `${summary.generated} generated / ${summary.total} total · ${summary.approved} approved · 0 flagged`;
                 reviewHintEl.textContent = 'Everything is generated. Use Previous and Next to review and flag anything that sounds wrong.';
@@ -1271,12 +1319,12 @@
 
             const flaggedRowCount = getFlaggedRows().length;
             zipCount.textContent = summary.ready;
-            flaggedZipCount.textContent = summary.flaggedWithAudio;
+            approvedZipCount.textContent = summary.approved;
             flaggedTxtCount.textContent = flaggedRowCount;
             regenerateFlaggedCount.textContent = summary.flagged;
 
             setButtonDisabled(downloadZipBtn, controlsLocked || summary.ready === 0);
-            setButtonDisabled(downloadFlaggedBtn, controlsLocked || summary.flaggedWithAudio === 0);
+            setButtonDisabled(downloadApprovedBtn, controlsLocked || summary.approved === 0);
             setButtonDisabled(downloadFlaggedTxtBtn, controlsLocked || flaggedRowCount === 0);
             setButtonDisabled(regenerateFlaggedBtn, controlsLocked || summary.flagged === 0);
             setButtonDisabled(autoGenerateBtn, Boolean(loadingButtonKey) || (!isAutoGenerating && summary.total === 0));
@@ -1490,13 +1538,14 @@
 
                 const termCandidate = columns[1] !== undefined ? columns[1] : columns[0];
                 const word = (termCandidate || '').trim();
+                const wordVariants = splitWordVariants(word);
                 const sentencesRaw = (columns[3] || '').trim();
                 const sentences = sentencesRaw
                     ? sentencesRaw.split('<br>').map(value => value.trim()).filter(Boolean)
                     : [];
 
                 if (!word) return;
-                rows.push({ word, sentences, sourceName, sourceFolder, originalLine });
+                rows.push({ word, wordVariants, sentences, sourceName, sourceFolder, originalLine });
             });
 
             return rows;
@@ -1970,12 +2019,12 @@
             );
         }
 
-        async function downloadFlaggedZip() {
+        async function downloadApprovedZip() {
             await downloadItemsAsZip(
-                getFlaggedAudioItems(),
-                'anki_flagged_audio_files.zip',
-                'No flagged audio files to download.',
-                'Flagged ZIP downloaded successfully!'
+                getApprovedAudioItems(),
+                'anki_approved_audio_files.zip',
+                'No approved audio files to download.',
+                'Approved ZIP downloaded successfully!'
             );
         }
 
