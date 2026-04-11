@@ -249,6 +249,11 @@
                     >-</p>
                 </div>
                 <p id="currentItemStatus" class="text-sm text-gray-500">Not generated yet.</p>
+                <p
+                    id="copyFeedback"
+                    class="hidden rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-sm text-indigo-100 break-words"
+                    aria-live="polite"
+                ></p>
                 <audio id="audioPlayer" controls class="w-full mt-4 hidden"></audio>
             </div>
 
@@ -411,6 +416,7 @@
         const currentTextEl = document.getElementById('currentText');
         const currentTextLabelEl = document.getElementById('currentTextLabel');
         const currentItemStatusEl = document.getElementById('currentItemStatus');
+        const copyFeedbackEl = document.getElementById('copyFeedback');
         const audioPlayer = document.getElementById('audioPlayer');
         const reviewSummaryEl = document.getElementById('reviewSummary');
         const reviewHintEl = document.getElementById('reviewHint');
@@ -451,6 +457,7 @@
         let autoStopRequested = false;
         let activeAudioUrl = null;
         let loadingButtonKey = null;
+        let copyFeedbackTimerId = null;
         const copyCycleState = {
             reviewText: { groupKey: '', total: 0, nextIndex: 0 },
             outputFilename: { groupKey: '', total: 0, nextIndex: 0 }
@@ -1389,6 +1396,7 @@
 
         function updateUIForCurrentItem(options = {}) {
             const { autoplayAudio = false } = options;
+            hideCopyFeedback();
 
             if (generationQueue.length === 0) {
                 currentTextLabelEl.textContent = getModeReviewLabel(generationMode);
@@ -2123,6 +2131,48 @@
             return item.filename.replace(/\.[^/.]+$/, '');
         }
 
+        function hideCopyFeedback() {
+            if (copyFeedbackTimerId) {
+                window.clearTimeout(copyFeedbackTimerId);
+                copyFeedbackTimerId = null;
+            }
+            if (!copyFeedbackEl) return;
+            copyFeedbackEl.textContent = '';
+            copyFeedbackEl.classList.add('hidden');
+        }
+
+        function buildCopyPreview(text, maxLength = 120) {
+            if (typeof text !== 'string') return '';
+            const normalized = text.replace(/\s+/g, ' ').trim();
+            if (!normalized) return '';
+            if (normalized.length <= maxLength) return normalized;
+            return `${normalized.slice(0, maxLength - 1)}...`;
+        }
+
+        function showCopyFeedback(label, text, options = {}) {
+            if (!copyFeedbackEl) return;
+
+            const preview = buildCopyPreview(text);
+            if (!preview) {
+                hideCopyFeedback();
+                return;
+            }
+
+            const { position = 0, total = 0 } = options;
+            const positionSuffix = total > 1 && position > 0 ? ` (${position}/${total})` : '';
+            copyFeedbackEl.textContent = `${label}${positionSuffix}: ${preview}`;
+            copyFeedbackEl.classList.remove('hidden');
+
+            if (copyFeedbackTimerId) {
+                window.clearTimeout(copyFeedbackTimerId);
+            }
+            copyFeedbackTimerId = window.setTimeout(() => {
+                copyFeedbackEl.classList.add('hidden');
+                copyFeedbackEl.textContent = '';
+                copyFeedbackTimerId = null;
+            }, 2600);
+        }
+
         function setCopyPayload(element, text, label) {
             if (!element) return;
             const normalizedText = typeof text === 'string' ? text.trim() : '';
@@ -2172,6 +2222,7 @@
                 await writeTextToClipboard(normalizedText);
                 const positionSuffix = total > 1 && position > 0 ? ` (${position}/${total})` : '';
                 updateStatus(`${label}${positionSuffix} copied.`, 'success');
+                showCopyFeedback(label, normalizedText, { position, total });
                 return true;
             } catch (error) {
                 updateStatus(`Could not copy ${label.toLowerCase()}: ${error.message}`, 'error');
