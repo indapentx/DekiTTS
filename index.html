@@ -267,7 +267,7 @@
             <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
                 <button id="previousBtn"
                     class="bg-gray-700 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-transform transform hover:scale-105 btn-disabled"
-                    disabled>Previous<kbd>P</kbd></button>
+                    disabled>Previous<kbd>B</kbd></button>
                 <button id="generateBtn"
                     class="bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform transform hover:scale-105">Generate<kbd>G</kbd></button>
                 <button id="regenerateBtn"
@@ -391,7 +391,7 @@
         const AUTO_GENERATE_DELAY_MS = 10;
         const PROMPTED_WORD_PREFIX = 'Das Wort ist:';
         const BUTTON_LABELS = {
-            previous: 'Previous<kbd>P</kbd>',
+            previous: 'Previous<kbd>B</kbd>',
             generate: 'Generate<kbd>G</kbd>',
             regenerate: 'Regenerate<kbd>R</kbd>',
             approve: 'Approve<kbd>A</kbd>',
@@ -451,6 +451,10 @@
         let autoStopRequested = false;
         let activeAudioUrl = null;
         let loadingButtonKey = null;
+        const copyCycleState = {
+            reviewText: { groupKey: '', total: 0, nextIndex: 0 },
+            outputFilename: { groupKey: '', total: 0, nextIndex: 0 }
+        };
 
         // --- Event Listeners ---
         loadFileBtn.addEventListener('click', handleFileLoad);
@@ -1460,7 +1464,7 @@
 
             const key = event.key.toLowerCase();
             switch (key) {
-                case 'p':
+                case 'b':
                 case 'arrowleft':
                     if (!previousBtn.disabled) clickButton(previousBtn);
                     break;
@@ -1475,6 +1479,21 @@
                     break;
                 case 'f':
                     if (!flagBtn.disabled) clickButton(flagBtn);
+                    break;
+                case 'h':
+                    event.preventDefault();
+                    scheduleShortcutFocusRelease();
+                    void copyCurrentWordShortcut();
+                    break;
+                case 'j':
+                    event.preventDefault();
+                    scheduleShortcutFocusRelease();
+                    void copyCurrentRowReviewTextShortcut();
+                    break;
+                case 'k':
+                    event.preventDefault();
+                    scheduleShortcutFocusRelease();
+                    void copyCurrentRowFilenameShortcut();
                     break;
                 case 'n':
                 case 's':
@@ -2050,6 +2069,60 @@
         }
 
         // --- UI Helper Functions ---
+        function getCopyCycleGroupKey(item) {
+            if (!item) return '';
+            return `${generationMode}:${item.rowIndex}`;
+        }
+
+        function getCurrentRowQueueItems() {
+            const currentItem = getCurrentQueueItem();
+            if (!currentItem) return [];
+
+            return generationQueue.filter(item => item && item.rowIndex === currentItem.rowIndex);
+        }
+
+        function getNextCurrentRowCycleItem(stateKey) {
+            const currentItem = getCurrentQueueItem();
+            const rowItems = getCurrentRowQueueItems();
+
+            if (!currentItem || rowItems.length === 0) {
+                return { item: null, position: 0, total: 0 };
+            }
+
+            const state = copyCycleState[stateKey];
+            const groupKey = getCopyCycleGroupKey(currentItem);
+            if (!state) {
+                return { item: null, position: 0, total: 0 };
+            }
+
+            if (state.groupKey !== groupKey || state.total !== rowItems.length) {
+                state.groupKey = groupKey;
+                state.total = rowItems.length;
+                state.nextIndex = 0;
+            }
+
+            const index = state.nextIndex % rowItems.length;
+            state.nextIndex = (index + 1) % rowItems.length;
+
+            return {
+                item: rowItems[index],
+                position: index + 1,
+                total: rowItems.length
+            };
+        }
+
+        function getCopyLabelForItem(item) {
+            if (!item) return 'Text';
+            if (item.contentType === 'sentence') return 'Sentence';
+            if (item.contentType === 'prompted-word') return 'Prompted word';
+            return 'Word';
+        }
+
+        function getOutputFilenameForCopy(item) {
+            if (!item || !item.filename) return '';
+            return item.filename.replace(/\.[^/.]+$/, '');
+        }
+
         function setCopyPayload(element, text, label) {
             if (!element) return;
             const normalizedText = typeof text === 'string' ? text.trim() : '';
@@ -2087,23 +2160,47 @@
             }
         }
 
-        async function copyReviewText(element) {
-            if (!element) return;
-
-            const text = element.dataset.copyText || '';
-            const label = element.dataset.copyLabel || 'Text';
-
-            if (!text) {
+        async function copyTextWithStatus(text, label, options = {}) {
+            const normalizedText = typeof text === 'string' ? text.trim() : '';
+            const { position = 0, total = 0 } = options;
+            if (!normalizedText) {
                 updateStatus(`No ${label.toLowerCase()} available to copy.`, 'info');
-                return;
+                return false;
             }
 
             try {
-                await writeTextToClipboard(text);
-                updateStatus(`${label} copied.`, 'success');
+                await writeTextToClipboard(normalizedText);
+                const positionSuffix = total > 1 && position > 0 ? ` (${position}/${total})` : '';
+                updateStatus(`${label}${positionSuffix} copied.`, 'success');
+                return true;
             } catch (error) {
                 updateStatus(`Could not copy ${label.toLowerCase()}: ${error.message}`, 'error');
+                return false;
             }
+        }
+
+        async function copyReviewText(element) {
+            if (!element) return false;
+
+            const text = element.dataset.copyText || '';
+            const label = element.dataset.copyLabel || 'Text';
+            return copyTextWithStatus(text, label);
+        }
+
+        async function copyCurrentWordShortcut() {
+            return copyReviewText(currentWordEl);
+        }
+
+        async function copyCurrentRowReviewTextShortcut() {
+            const { item, position, total } = getNextCurrentRowCycleItem('reviewText');
+            const label = getCopyLabelForItem(item);
+            const text = item ? getItemReviewText(item) : '';
+            return copyTextWithStatus(text === '-' ? '' : text, label, { position, total });
+        }
+
+        async function copyCurrentRowFilenameShortcut() {
+            const { item, position, total } = getNextCurrentRowCycleItem('outputFilename');
+            return copyTextWithStatus(getOutputFilenameForCopy(item), 'Output filename', { position, total });
         }
 
         function bindCopyTarget(element) {
