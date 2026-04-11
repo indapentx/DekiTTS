@@ -448,6 +448,7 @@
         let allRows = [];
         let generationQueue = [];
         let currentQueueIndex = 0;
+        let reviewAdvanceDirection = 1;
         let lastGeneratedBlob = null;
         let generationMode = 'sentences';
         let balanceRefreshTimerId = null;
@@ -987,6 +988,26 @@
             currentQueueIndex = Math.max(0, Math.min(currentQueueIndex, generationQueue.length - 1));
         }
 
+        function resetReviewAdvanceDirection() {
+            reviewAdvanceDirection = 1;
+        }
+
+        function setReviewAdvanceDirection(direction) {
+            reviewAdvanceDirection = direction < 0 ? -1 : 1;
+        }
+
+        function moveQueueIndexInReviewDirection() {
+            if (generationQueue.length === 0) return false;
+
+            const nextIndex = currentQueueIndex + reviewAdvanceDirection;
+            if (nextIndex < 0 || nextIndex >= generationQueue.length) {
+                return false;
+            }
+
+            currentQueueIndex = nextIndex;
+            return true;
+        }
+
         function getCurrentQueueItem() {
             clampCurrentQueueIndex();
             return generationQueue[currentQueueIndex] || null;
@@ -1517,6 +1538,7 @@
 
             generationMode = value;
             currentQueueIndex = 0;
+            resetReviewAdvanceDirection();
             clearAudioPlayer();
             setLoadingState(false);
             generationQueue = buildGenerationQueue(allRows);
@@ -1599,6 +1621,7 @@
             allRows = combinedRows;
             generationQueue = buildGenerationQueue(allRows);
             currentQueueIndex = 0;
+            resetReviewAdvanceDirection();
             isAutoGenerating = false;
             autoStopRequested = false;
             setAutoGenerateButtonState(false);
@@ -1766,12 +1789,14 @@
 
         function moveToPreviousItem() {
             if (generationQueue.length === 0 || currentQueueIndex === 0) return;
+            setReviewAdvanceDirection(-1);
             currentQueueIndex -= 1;
             updateUIForCurrentItem({ autoplayAudio: true });
         }
 
         function moveToNextItem() {
             if (generationQueue.length === 0 || currentQueueIndex >= generationQueue.length - 1) return;
+            setReviewAdvanceDirection(1);
             currentQueueIndex += 1;
             updateUIForCurrentItem({ autoplayAudio: true });
         }
@@ -1794,8 +1819,8 @@
                 updateStatus(`Approved ${getItemDisplayWord(currentItem)}.`, 'success');
             }
 
-            if (advance && currentQueueIndex < generationQueue.length - 1) {
-                currentQueueIndex += 1;
+            if (advance) {
+                moveQueueIndexInReviewDirection();
             }
             updateUIForCurrentItem({ autoplayAudio: true });
         }
@@ -1823,12 +1848,13 @@
                 );
             }
 
-            const shouldAdvance = advance && !isFlagged && currentQueueIndex < generationQueue.length - 1;
+            const shouldAdvance = advance && !isFlagged && moveQueueIndexInReviewDirection();
             if (shouldAdvance) {
-                currentQueueIndex += 1;
+                updateUIForCurrentItem({ autoplayAudio: true });
+                return;
             }
 
-            updateUIForCurrentItem({ autoplayAudio: shouldAdvance });
+            updateUIForCurrentItem({ autoplayAudio: false });
         }
 
         async function handleAutoGenerateAll() {
@@ -1857,6 +1883,7 @@
 
             if (missingIndexes.length === 0) {
                 currentQueueIndex = 0;
+                resetReviewAdvanceDirection();
                 updateUIForCurrentItem();
                 setAutoModeMessage('All clips are already generated. Review them and flag anything that sounds wrong.');
                 updateStatus('Everything is already generated. Start reviewing from the top.', 'info');
@@ -1898,6 +1925,7 @@
             autoStopRequested = false;
             setAutoGenerateButtonState(false);
             currentQueueIndex = 0;
+            resetReviewAdvanceDirection();
             updateUIForCurrentItem();
 
             if (stopped) {
@@ -1973,6 +2001,7 @@
             autoStopRequested = false;
             setAutoGenerateButtonState(false);
             currentQueueIndex = flaggedIndexes[0] || 0;
+            resetReviewAdvanceDirection();
             updateUIForCurrentItem();
 
             if (stopped) {
