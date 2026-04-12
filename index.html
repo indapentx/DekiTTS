@@ -936,6 +936,7 @@
                 sourceFolder: row.sourceFolder || '',
                 filename: `${filenameBase}.mp3`,
                 audioBlob: null,
+                approvedAudioBlob: null,
                 reviewStatus: 'pending'
             };
         }
@@ -1011,6 +1012,25 @@
         function getCurrentQueueItem() {
             clampCurrentQueueIndex();
             return generationQueue[currentQueueIndex] || null;
+        }
+
+        function getPlaybackBlob(item) {
+            if (!item) return null;
+            return item.audioBlob || item.approvedAudioBlob || null;
+        }
+
+        function hasApprovedAudio(item) {
+            return Boolean(item && item.approvedAudioBlob);
+        }
+
+        function hasPendingApprovedReplacement(item) {
+            return Boolean(item && item.audioBlob && item.approvedAudioBlob && item.audioBlob !== item.approvedAudioBlob);
+        }
+
+        function getReviewStatusAfterFlagClear(item) {
+            if (!item) return 'pending';
+            if (hasApprovedAudio(item)) return 'approved';
+            return getPlaybackBlob(item) ? 'generated' : 'pending';
         }
 
         function getSelectedVoiceMode() {
@@ -1122,12 +1142,13 @@
 
         function replayCurrentAudio() {
             const currentItem = getCurrentQueueItem();
-            if (!currentItem || !currentItem.audioBlob) {
+            const playbackBlob = getPlaybackBlob(currentItem);
+            if (!currentItem || !playbackBlob) {
                 updateStatus('Generate audio before replaying it.', 'error');
                 return;
             }
 
-            const currentBlobLoaded = lastGeneratedBlob === currentItem.audioBlob && Boolean(audioPlayer.src);
+            const currentBlobLoaded = lastGeneratedBlob === playbackBlob && Boolean(audioPlayer.src);
             if (currentBlobLoaded) {
                 audioPlayer.pause();
                 audioPlayer.currentTime = 0;
@@ -1136,7 +1157,7 @@
                 return;
             }
 
-            setAudioPlayerBlob(currentItem.audioBlob, {
+            setAudioPlayerBlob(playbackBlob, {
                 autoplay: true,
                 showPlayer: true
             });
@@ -1156,17 +1177,17 @@
             generationQueue.forEach(item => {
                 if (item.reviewStatus === 'flagged') {
                     summary.flagged += 1;
-                    if (item.audioBlob) {
+                    if (getPlaybackBlob(item)) {
                         summary.flaggedWithAudio += 1;
                     }
                 }
 
-                if (!item.audioBlob) {
+                if (!getPlaybackBlob(item)) {
                     summary.pendingGeneration += 1;
                     return;
                 }
                 summary.generated += 1;
-                if (item.reviewStatus === 'approved') {
+                if (item.reviewStatus === 'approved' && hasApprovedAudio(item)) {
                     summary.approved += 1;
                 }
             });
@@ -1188,7 +1209,7 @@
             const perCardCharMap = new Map();
 
             generationQueue.forEach(item => {
-                if (!item || item.audioBlob) return;
+                if (!item || getPlaybackBlob(item)) return;
 
                 const cleaned = getGenerationTextForItem(item);
                 if (!cleaned) return;
@@ -1212,7 +1233,7 @@
         }
 
         function getReadyItems() {
-            return generationQueue.filter(item => item && item.audioBlob && item.reviewStatus !== 'flagged');
+            return generationQueue.filter(item => item && getPlaybackBlob(item) && item.reviewStatus !== 'flagged');
         }
 
         function getFlaggedItems() {
@@ -1220,11 +1241,13 @@
         }
 
         function getFlaggedAudioItems() {
-            return generationQueue.filter(item => item && item.audioBlob && item.reviewStatus === 'flagged');
+            return generationQueue.filter(item => item && getPlaybackBlob(item) && item.reviewStatus === 'flagged');
         }
 
         function getApprovedAudioItems() {
-            return generationQueue.filter(item => item && item.audioBlob && item.reviewStatus === 'approved');
+            return generationQueue
+                .filter(item => item && item.reviewStatus === 'approved' && item.approvedAudioBlob)
+                .map(item => ({ ...item, audioBlob: item.approvedAudioBlob }));
         }
 
         function getFlaggedRows() {
@@ -1309,21 +1332,23 @@
 
             if (item.reviewStatus === 'flagged') {
                 currentItemStatusEl.classList.add('text-amber-400');
-                currentItemStatusEl.textContent = item.audioBlob
+                currentItemStatusEl.textContent = getPlaybackBlob(item)
                     ? `Flagged for follow-up. Output file is ${getItemZipPath(item)}.`
                     : `Flagged for follow-up before generation. Output file will be ${getItemZipPath(item)}.`;
                 return;
             }
 
-            if (!item.audioBlob) {
+            if (!getPlaybackBlob(item)) {
                 currentItemStatusEl.classList.add('text-gray-500');
                 currentItemStatusEl.textContent = `Not generated yet. Output file will be ${getItemZipPath(item)}.`;
                 return;
             }
 
-            if (item.reviewStatus === 'approved') {
+            if (item.reviewStatus === 'approved' && hasApprovedAudio(item)) {
                 currentItemStatusEl.classList.add('text-green-400');
-                currentItemStatusEl.textContent = `Approved and ready for export as ${getItemZipPath(item)}.`;
+                currentItemStatusEl.textContent = hasPendingApprovedReplacement(item)
+                    ? `Approved version is saved for export as ${getItemZipPath(item)}. The current regenerated preview is not approved yet.`
+                    : `Approved and ready for export as ${getItemZipPath(item)}.`;
                 return;
             }
 
@@ -1365,7 +1390,7 @@
         function updateActionButtons() {
             const currentItem = getCurrentQueueItem();
             const hasItem = Boolean(currentItem);
-            const hasAudio = Boolean(currentItem && currentItem.audioBlob);
+            const hasAudio = Boolean(getPlaybackBlob(currentItem));
             const isLocked = isAutoGenerating || Boolean(loadingButtonKey);
 
             previousBtn.innerHTML = BUTTON_LABELS.previous;
@@ -1443,8 +1468,9 @@
             setCopyPayload(currentTextEl, getItemReviewText(currentItem) === '-' ? '' : getItemReviewText(currentItem), currentTextLabelEl.textContent);
             updateCurrentItemStatus(currentItem);
 
-            if (currentItem.audioBlob) {
-                setAudioPlayerBlob(currentItem.audioBlob, {
+            const playbackBlob = getPlaybackBlob(currentItem);
+            if (playbackBlob) {
+                setAudioPlayerBlob(playbackBlob, {
                     showPlayer: true,
                     autoplay: autoplayAudio
                 });
@@ -1755,7 +1781,7 @@
                 const blob = await response.blob();
                 targetItem.audioBlob = blob;
                 if (targetItem.reviewStatus !== 'flagged') {
-                    targetItem.reviewStatus = 'generated';
+                    targetItem.reviewStatus = getReviewStatusAfterFlagClear(targetItem);
                 }
                 lastGeneratedBlob = blob;
 
@@ -1805,7 +1831,8 @@
             const { silent = false, advance = true } = options;
             const currentItem = getCurrentQueueItem();
 
-            if (!currentItem || !currentItem.audioBlob) {
+            const playbackBlob = getPlaybackBlob(currentItem);
+            if (!currentItem || !playbackBlob) {
                 if (!silent) {
                     updateStatus('Generate audio before approving.', 'error');
                 }
@@ -1813,7 +1840,8 @@
             }
 
             currentItem.reviewStatus = 'approved';
-            lastGeneratedBlob = currentItem.audioBlob;
+            currentItem.approvedAudioBlob = playbackBlob;
+            lastGeneratedBlob = playbackBlob;
 
             if (!silent) {
                 updateStatus(`Approved ${getItemDisplayWord(currentItem)}.`, 'success');
@@ -1838,7 +1866,7 @@
 
             const isFlagged = currentItem.reviewStatus === 'flagged';
             currentItem.reviewStatus = isFlagged
-                ? (currentItem.audioBlob ? 'generated' : 'pending')
+                ? getReviewStatusAfterFlagClear(currentItem)
                 : 'flagged';
 
             if (!silent) {
@@ -1878,7 +1906,7 @@
             }
 
             const missingIndexes = generationQueue
-                .map((item, index) => (item && !item.audioBlob ? index : -1))
+                .map((item, index) => (item && !getPlaybackBlob(item) ? index : -1))
                 .filter(index => index !== -1);
 
             if (missingIndexes.length === 0) {
@@ -1982,7 +2010,7 @@
                 updateUIForCurrentItem();
                 setAutoModeMessage(`Processing flagged clip ${position + 1} of ${flaggedIndexes.length}...`);
 
-                const success = await processGeneration(Boolean(targetItem && targetItem.audioBlob), {
+                const success = await processGeneration(Boolean(targetItem && getPlaybackBlob(targetItem)), {
                     skipPlayback: true,
                     silentStatus: true,
                     manageLoadingState: false,
@@ -2033,14 +2061,15 @@
             const seenPaths = new Map();
 
             return items
-                .filter(item => item && item.audioBlob)
+                .filter(item => item && getPlaybackBlob(item))
                 .map(item => {
+                    const blob = getPlaybackBlob(item);
                     const basePath = getItemZipPath(item);
                     const occurrence = (seenPaths.get(basePath) || 0) + 1;
                     seenPaths.set(basePath, occurrence);
                     return {
                         path: appendDuplicateSuffix(basePath, occurrence),
-                        blob: item.audioBlob
+                        blob
                     };
                 });
         }
