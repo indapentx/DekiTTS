@@ -273,7 +273,17 @@
                         <p class="text-sm font-semibold text-gray-200">Review Queue</p>
                         <p id="reviewSummary" class="text-xs text-gray-400">0 generated / 0 total</p>
                     </div>
-                    <p id="reviewHint" class="text-xs text-gray-500">Generate missing audio, then use Previous and Next to review every clip.</p>
+                    <div class="flex flex-col gap-2 md:items-end">
+                        <p id="reviewHint" class="text-xs text-gray-500">Generate missing audio, then use Previous and Next to review every clip.</p>
+                        <label for="flaggedOnlyToggle" class="inline-flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-100">
+                            <input
+                                id="flaggedOnlyToggle"
+                                type="checkbox"
+                                class="h-4 w-4 rounded border-gray-600 bg-gray-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-gray-900"
+                            >
+                            <span>Flagged Only</span>
+                        </label>
+                    </div>
                 </div>
             </div>
 
@@ -431,6 +441,7 @@
         const versionHistoryListEl = document.getElementById('versionHistoryList');
         const reviewSummaryEl = document.getElementById('reviewSummary');
         const reviewHintEl = document.getElementById('reviewHint');
+        const flaggedOnlyToggle = document.getElementById('flaggedOnlyToggle');
         const previousBtn = document.getElementById('previousBtn');
         const generateBtn = document.getElementById('generateBtn');
         const regenerateBtn = document.getElementById('regenerateBtn');
@@ -460,6 +471,9 @@
         let generationQueue = [];
         let currentQueueIndex = 0;
         let reviewAdvanceDirection = 1;
+        let consecutivePreviousMoves = 0;
+        const REVERSE_REVIEW_TRIGGER_STEPS = 2;
+        let isFlaggedOnlyMode = false;
         let lastGeneratedBlob = null;
         let generationMode = 'sentences';
         let balanceRefreshTimerId = null;
@@ -483,6 +497,7 @@
         approveBtn.addEventListener('click', () => handleApprove());
         flagBtn.addEventListener('click', () => toggleFlagForCurrentItem());
         nextBtn.addEventListener('click', moveToNextItem);
+        flaggedOnlyToggle.addEventListener('change', handleFlaggedOnlyToggle);
         downloadZipBtn.addEventListener('click', downloadReadyZip);
         downloadApprovedBtn.addEventListener('click', downloadApprovedZip);
         downloadFlaggedTxtBtn.addEventListener('click', downloadFlaggedTxt);
@@ -1005,21 +1020,90 @@
 
         function resetReviewAdvanceDirection() {
             reviewAdvanceDirection = 1;
+            consecutivePreviousMoves = 0;
+        }
+
+        function resetFlaggedOnlyMode() {
+            isFlaggedOnlyMode = false;
+            flaggedOnlyToggle.checked = false;
         }
 
         function setReviewAdvanceDirection(direction) {
-            reviewAdvanceDirection = direction < 0 ? -1 : 1;
+            if (direction < 0) {
+                consecutivePreviousMoves = Math.min(consecutivePreviousMoves + 1, REVERSE_REVIEW_TRIGGER_STEPS);
+                reviewAdvanceDirection = consecutivePreviousMoves >= REVERSE_REVIEW_TRIGGER_STEPS ? -1 : 1;
+                return;
+            }
+
+            reviewAdvanceDirection = 1;
+            consecutivePreviousMoves = 0;
+        }
+
+        function isItemEligibleForReviewNavigation(item) {
+            if (!item) return false;
+            return !isFlaggedOnlyMode || item.reviewStatus === 'flagged';
+        }
+
+        function findReviewQueueIndex(direction, options = {}) {
+            const { startIndex = currentQueueIndex, includeCurrent = false } = options;
+            if (generationQueue.length === 0) return -1;
+
+            const normalizedDirection = direction < 0 ? -1 : 1;
+            let candidateIndex = includeCurrent ? startIndex : startIndex + normalizedDirection;
+
+            while (candidateIndex >= 0 && candidateIndex < generationQueue.length) {
+                if (isItemEligibleForReviewNavigation(generationQueue[candidateIndex])) {
+                    return candidateIndex;
+                }
+                candidateIndex += normalizedDirection;
+            }
+
+            return -1;
+        }
+
+        function findNearestReviewQueueIndex(preferredDirection = reviewAdvanceDirection) {
+            const normalizedDirection = preferredDirection < 0 ? -1 : 1;
+            const preferredIndex = findReviewQueueIndex(normalizedDirection, { startIndex: currentQueueIndex });
+            if (preferredIndex !== -1) {
+                return preferredIndex;
+            }
+            return findReviewQueueIndex(normalizedDirection * -1, { startIndex: currentQueueIndex });
+        }
+
+        function syncCurrentItemToReviewFilter(options = {}) {
+            const {
+                preferredDirection = reviewAdvanceDirection,
+                emptyMessage = 'No flagged cards left. Flagged-only review turned off.'
+            } = options;
+
+            if (!isFlaggedOnlyMode || generationQueue.length === 0) return false;
+
+            const currentItem = generationQueue[currentQueueIndex] || null;
+            if (isItemEligibleForReviewNavigation(currentItem)) {
+                return false;
+            }
+
+            const targetIndex = findNearestReviewQueueIndex(preferredDirection);
+            if (targetIndex !== -1) {
+                currentQueueIndex = targetIndex;
+                return true;
+            }
+
+            resetFlaggedOnlyMode();
+            updateStatus(emptyMessage, 'info');
+            return false;
         }
 
         function moveQueueIndexInReviewDirection() {
             if (generationQueue.length === 0) return false;
 
-            const nextIndex = currentQueueIndex + reviewAdvanceDirection;
-            if (nextIndex < 0 || nextIndex >= generationQueue.length) {
+            const nextIndex = findReviewQueueIndex(reviewAdvanceDirection);
+            if (nextIndex === -1) {
                 return false;
             }
 
             currentQueueIndex = nextIndex;
+            consecutivePreviousMoves = reviewAdvanceDirection < 0 ? REVERSE_REVIEW_TRIGGER_STEPS : 0;
             return true;
         }
 
@@ -1576,6 +1660,10 @@
                 reviewHintEl.textContent = 'Everything is generated. Use Previous and Next to review and flag anything that sounds wrong.';
             }
 
+            if (isFlaggedOnlyMode) {
+                reviewHintEl.textContent = `${reviewHintEl.textContent} Flagged Only is on.`;
+            }
+
             const flaggedRowCount = getFlaggedRows().length;
             zipCount.textContent = summary.ready;
             approvedZipCount.textContent = summary.approved;
@@ -1602,12 +1690,15 @@
             flagBtn.innerHTML = currentItem && currentItem.reviewStatus === 'flagged' ? 'Unflag<kbd>F</kbd>' : BUTTON_LABELS.flag;
             nextBtn.innerHTML = BUTTON_LABELS.next;
 
-            setButtonDisabled(previousBtn, isLocked || !hasItem || currentQueueIndex === 0);
+            const hasPreviousReviewItem = findReviewQueueIndex(-1) !== -1;
+            const hasNextReviewItem = findReviewQueueIndex(1) !== -1;
+
+            setButtonDisabled(previousBtn, isLocked || !hasItem || !hasPreviousReviewItem);
             setButtonDisabled(generateBtn, isLocked || !hasItem || hasAudio);
             setButtonDisabled(regenerateBtn, isLocked || !hasAudio);
             setButtonDisabled(approveBtn, isLocked || !hasAudio);
             setButtonDisabled(flagBtn, isLocked || !hasItem);
-            setButtonDisabled(nextBtn, isLocked || !hasItem || currentQueueIndex >= generationQueue.length - 1);
+            setButtonDisabled(nextBtn, isLocked || !hasItem || !hasNextReviewItem);
         }
 
         function setLoadingState(isLoading, buttonKey = 'generate') {
@@ -1757,12 +1848,17 @@
             }
 
             if (advance) {
-                const moved = moveQueueIndexInReviewDirection();
+                const moved = moveQueueIndexInReviewDirection()
+                    || syncCurrentItemToReviewFilter({ preferredDirection: reviewAdvanceDirection });
                 updateUIForCurrentItem({ autoplayAudio: moved, syncPlayerToCurrent: true });
                 return true;
             }
 
-            updateUIForCurrentItem({ autoplayAudio: false, syncPlayerToCurrent });
+            const movedToFilteredItem = syncCurrentItemToReviewFilter({ preferredDirection: reviewAdvanceDirection });
+            updateUIForCurrentItem({
+                autoplayAudio: false,
+                syncPlayerToCurrent: syncPlayerToCurrent || movedToFilteredItem
+            });
             return true;
         }
 
@@ -1871,6 +1967,7 @@
             generationMode = value;
             currentQueueIndex = 0;
             resetReviewAdvanceDirection();
+            resetFlaggedOnlyMode();
             clearAudioPlayer();
             setLoadingState(false);
             generationQueue = buildGenerationQueue(allRows);
@@ -1954,6 +2051,7 @@
             generationQueue = buildGenerationQueue(allRows);
             currentQueueIndex = 0;
             resetReviewAdvanceDirection();
+            resetFlaggedOnlyMode();
             isAutoGenerating = false;
             autoStopRequested = false;
             setAutoGenerateButtonState(false);
@@ -2122,17 +2220,48 @@
         }
 
         function moveToPreviousItem() {
-            if (generationQueue.length === 0 || currentQueueIndex === 0) return;
+            if (generationQueue.length === 0) return;
             setReviewAdvanceDirection(-1);
-            currentQueueIndex -= 1;
+            const previousIndex = findReviewQueueIndex(-1);
+            if (previousIndex === -1) return;
+            currentQueueIndex = previousIndex;
             updateUIForCurrentItem({ autoplayAudio: true });
         }
 
         function moveToNextItem() {
-            if (generationQueue.length === 0 || currentQueueIndex >= generationQueue.length - 1) return;
+            if (generationQueue.length === 0) return;
             setReviewAdvanceDirection(1);
-            currentQueueIndex += 1;
+            const nextIndex = findReviewQueueIndex(1);
+            if (nextIndex === -1) return;
+            currentQueueIndex = nextIndex;
             updateUIForCurrentItem({ autoplayAudio: true });
+        }
+
+        function handleFlaggedOnlyToggle(event) {
+            const shouldEnable = Boolean(event.target.checked);
+
+            if (!shouldEnable) {
+                resetFlaggedOnlyMode();
+                updateReviewSummary();
+                updateActionButtons();
+                return;
+            }
+
+            if (getFlaggedItems().length === 0) {
+                resetFlaggedOnlyMode();
+                updateStatus('No flagged cards available for flagged-only review.', 'error');
+                updateReviewSummary();
+                updateActionButtons();
+                return;
+            }
+
+            isFlaggedOnlyMode = true;
+            flaggedOnlyToggle.checked = true;
+            const moved = syncCurrentItemToReviewFilter({
+                preferredDirection: reviewAdvanceDirection,
+                emptyMessage: 'No flagged cards available for flagged-only review.'
+            });
+            updateUIForCurrentItem({ autoplayAudio: moved });
         }
 
         function handleApprove(options = {}) {
@@ -2178,12 +2307,11 @@
             }
 
             const shouldAdvance = advance && !isFlagged && moveQueueIndexInReviewDirection();
-            if (shouldAdvance) {
-                updateUIForCurrentItem({ autoplayAudio: true });
-                return;
-            }
+            const movedToFilteredItem = shouldAdvance
+                ? true
+                : syncCurrentItemToReviewFilter({ preferredDirection: reviewAdvanceDirection });
 
-            updateUIForCurrentItem({ autoplayAudio: false });
+            updateUIForCurrentItem({ autoplayAudio: shouldAdvance || movedToFilteredItem });
         }
 
         async function handleAutoGenerateAll() {
