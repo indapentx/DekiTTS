@@ -478,6 +478,15 @@
         let activeAudioUrl = null;
         let loadingButtonKey = null;
         let copyFeedbackTimerId = null;
+        const REPEATABLE_SHORTCUT_KEYS = new Set([
+            'arrowleft',
+            'arrowright',
+            'b',
+            'n',
+            's',
+            't',
+            'z'
+        ]);
         const copyCycleState = {
             reviewText: { groupKey: '', total: 0, nextIndex: 0 },
             outputFilename: { groupKey: '', total: 0, nextIndex: 0 }
@@ -1884,9 +1893,20 @@
             }
         }
 
+        function isRepeatableShortcut(event, key) {
+            if (event.code === 'Space') return false;
+            return REPEATABLE_SHORTCUT_KEYS.has(key);
+        }
+
         function handleKeyPress(event) {
             const tagName = typeof event.target?.tagName === 'string' ? event.target.tagName : '';
             if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || event.target.isContentEditable) {
+                return;
+            }
+
+            const key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
+            if (event.repeat && !isRepeatableShortcut(event, key)) {
+                event.preventDefault();
                 return;
             }
 
@@ -1903,7 +1923,6 @@
                 return;
             }
 
-            const key = event.key.toLowerCase();
             switch (key) {
                 case 'b':
                 case 'arrowleft':
