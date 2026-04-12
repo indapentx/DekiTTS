@@ -268,22 +268,31 @@
 
             <!-- Review Summary -->
             <div class="bg-gray-900/50 p-4 rounded-xl border border-gray-700">
-                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                    <div>
-                        <p class="text-sm font-semibold text-gray-200">Review Queue</p>
-                        <p id="reviewSummary" class="text-xs text-gray-400">0 generated / 0 total</p>
+                <div class="flex flex-col gap-3">
+                    <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                        <div>
+                            <p class="text-sm font-semibold text-gray-200">Review Queue</p>
+                            <p id="reviewSummary" class="text-xs text-gray-400">0 generated / 0 total</p>
+                        </div>
+                        <div class="flex flex-col gap-2 md:items-end">
+                            <p id="reviewHint" class="text-xs text-gray-500">Generate missing audio, then use Previous and Next to review every clip.</p>
+                            <div class="flex flex-wrap gap-2 md:justify-end">
+                                <label for="flaggedOnlyToggle" class="inline-flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-semibold text-amber-100">
+                                    <input
+                                        id="flaggedOnlyToggle"
+                                        type="checkbox"
+                                        class="h-3.5 w-3.5 rounded border-gray-600 bg-gray-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-gray-900"
+                                    >
+                                    <span>Flagged Only</span>
+                                </label>
+                                <button id="autoGenerateBtn"
+                                    class="inline-flex items-center justify-center bg-indigo-600 text-white text-xs font-semibold py-1.5 px-3 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-[1.02]">
+                                    Generate All
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                    <div class="flex flex-col gap-2 md:items-end">
-                        <p id="reviewHint" class="text-xs text-gray-500">Generate missing audio, then use Previous and Next to review every clip.</p>
-                        <label for="flaggedOnlyToggle" class="inline-flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-100">
-                            <input
-                                id="flaggedOnlyToggle"
-                                type="checkbox"
-                                class="h-4 w-4 rounded border-gray-600 bg-gray-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-gray-900"
-                            >
-                            <span>Flagged Only</span>
-                        </label>
-                    </div>
+                    <p id="autoModeStatus" class="text-xs text-gray-500">Uses your selected voice, model, and generation mode, without auto-approving.</p>
                 </div>
             </div>
 
@@ -308,40 +317,25 @@
                     disabled>Next<kbd>N</kbd></button>
             </div>
 
-            <!-- Auto Generation -->
-            <div class="bg-gray-900/50 p-4 rounded-xl border border-gray-700">
-                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                    <div>
-                        <p class="text-sm font-semibold text-gray-200">Optional: Generate Everything At Once</p>
-                        <p class="text-xs text-gray-400">Generate every missing clip first, then review them one by one and flag the bad ones.</p>
-                    </div>
-                    <button id="autoGenerateBtn"
-                        class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-105">
-                        Generate All
-                    </button>
-                </div>
-                <p id="autoModeStatus" class="text-xs text-gray-500 mt-2">Uses your selected voice, model, and generation mode, without auto-approving.</p>
-            </div>
-
             <!-- Download Section -->
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 pt-2">
                 <button id="downloadZipBtn"
-                    class="w-full bg-gray-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-transform transform hover:scale-105 btn-disabled"
+                    class="w-full bg-gray-600 text-white text-sm font-semibold leading-snug py-2.5 px-4 rounded-lg shadow-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-transform transform hover:scale-[1.02] btn-disabled"
                     disabled>
                     Download Ready ZIP (<span id="zipCount">0</span> files)
                 </button>
                 <button id="downloadApprovedBtn"
-                    class="w-full bg-green-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-transform transform hover:scale-105 btn-disabled"
+                    class="w-full bg-green-600 text-white text-sm font-semibold leading-snug py-2.5 px-4 rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-transform transform hover:scale-[1.02] btn-disabled"
                     disabled>
                     Download Approved ZIP (<span id="approvedZipCount">0</span> files)
                 </button>
                 <button id="downloadFlaggedTxtBtn"
-                    class="w-full bg-orange-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-transform transform hover:scale-105 btn-disabled"
+                    class="w-full bg-orange-600 text-white text-sm font-semibold leading-snug py-2.5 px-4 rounded-lg shadow-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-transform transform hover:scale-[1.02] btn-disabled"
                     disabled>
                     Download Flagged TXT (<span id="flaggedTxtCount">0</span> cards)
                 </button>
                 <button id="regenerateFlaggedBtn"
-                    class="w-full bg-pink-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 transition-transform transform hover:scale-105 btn-disabled"
+                    class="w-full bg-pink-600 text-white text-sm font-semibold leading-snug py-2.5 px-4 rounded-lg shadow-md hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 transition-transform transform hover:scale-[1.02] btn-disabled"
                     disabled>
                     Regenerate Flagged (<span id="regenerateFlaggedCount">0</span>)
                 </button>
