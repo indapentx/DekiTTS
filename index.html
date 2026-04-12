@@ -950,6 +950,7 @@
                 audioVersions: [],
                 currentVersionId: null,
                 approvedVersionId: null,
+                browsedVersionId: null,
                 reviewStatus: 'pending'
             };
         }
@@ -1053,8 +1054,21 @@
             return getAudioVersionById(item, item?.approvedVersionId);
         }
 
+        function getBrowsedAudioVersion(item) {
+            return getAudioVersionById(item, item?.browsedVersionId);
+        }
+
+        function getListeningAudioVersion(item) {
+            return getBrowsedAudioVersion(item) || getCurrentAudioVersion(item);
+        }
+
         function getPlaybackBlob(item) {
             const version = getCurrentAudioVersion(item);
+            return version ? version.blob : null;
+        }
+
+        function getListeningPlaybackBlob(item) {
+            const version = getListeningAudioVersion(item);
             return version ? version.blob : null;
         }
 
@@ -1094,6 +1108,34 @@
             return `${item.id}-take-${takeNumber}`;
         }
 
+        function getOrderedAudioVersions(item) {
+            return getAudioVersions(item).slice().sort((left, right) => left.takeNumber - right.takeNumber);
+        }
+
+        function setBrowsedVersion(item, versionId) {
+            if (!item) return null;
+            if (!versionId) {
+                item.browsedVersionId = null;
+                return null;
+            }
+
+            const version = getAudioVersionById(item, versionId);
+            item.browsedVersionId = version ? version.id : null;
+            return version;
+        }
+
+        function getCycledAudioVersion(item, direction) {
+            const versions = getOrderedAudioVersions(item);
+            if (versions.length === 0) return null;
+
+            const anchorVersion = getBrowsedAudioVersion(item) || getCurrentAudioVersion(item) || versions[0];
+            const anchorIndex = Math.max(versions.findIndex(version => version.id === anchorVersion?.id), 0);
+            const step = direction < 0 ? -1 : 1;
+            const nextIndex = (anchorIndex + step + versions.length) % versions.length;
+
+            return versions[nextIndex];
+        }
+
         function addAudioVersion(item, blob, source) {
             if (!item || !blob) return null;
 
@@ -1109,6 +1151,7 @@
 
             versions.push(version);
             item.currentVersionId = version.id;
+            item.browsedVersionId = version.id;
             return version;
         }
 
@@ -1231,7 +1274,8 @@
 
         function replayCurrentAudio() {
             const currentItem = getCurrentQueueItem();
-            const playbackBlob = getPlaybackBlob(currentItem);
+            const listeningVersion = getListeningAudioVersion(currentItem);
+            const playbackBlob = listeningVersion ? listeningVersion.blob : null;
             if (!currentItem || !playbackBlob) {
                 updateStatus('Generate audio before replaying it.', 'error');
                 return;
@@ -1250,6 +1294,7 @@
                 autoplay: true,
                 showPlayer: true
             });
+            updateStatus(`Playing ${getItemDisplayWord(currentItem)} · ${getAudioVersionLabel(listeningVersion)}.`, 'info');
         }
 
         function getQueueSummary() {
@@ -1460,6 +1505,7 @@
             const versions = getAudioVersions(item).slice().sort((left, right) => right.takeNumber - left.takeNumber);
             const currentVersion = getCurrentAudioVersion(item);
             const approvedVersion = getApprovedAudioVersion(item);
+            const browsedVersion = getBrowsedAudioVersion(item);
             const controlsLocked = isAutoGenerating || Boolean(loadingButtonKey);
             const takeCount = versions.length;
 
@@ -1470,6 +1516,7 @@
             versionHistoryListEl.innerHTML = versions.map(version => {
                 const isCurrent = currentVersion && currentVersion.id === version.id;
                 const isApproved = approvedVersion && approvedVersion.id === version.id;
+                const isListening = browsedVersion && browsedVersion.id === version.id;
                 const sourceLabel = getAudioVersionSourceLabel(version);
                 const timeLabel = formatVersionTimestamp(version.createdAt);
                 const metaLabel = timeLabel ? `${sourceLabel} · ${timeLabel}` : sourceLabel;
@@ -1477,7 +1524,8 @@
                 const playDisabled = controlsLocked;
                 const badgeMarkup = [
                     isCurrent ? '<span class="rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2 py-0.5 text-xs font-semibold text-indigo-300">Current</span>' : '',
-                    isApproved ? '<span class="rounded-full border border-green-500/40 bg-green-500/10 px-2 py-0.5 text-xs font-semibold text-green-300">Approved</span>' : ''
+                    isApproved ? '<span class="rounded-full border border-green-500/40 bg-green-500/10 px-2 py-0.5 text-xs font-semibold text-green-300">Approved</span>' : '',
+                    isListening ? '<span class="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-300">Listening</span>' : ''
                 ].filter(Boolean).join('');
 
                 return `
@@ -1625,7 +1673,7 @@
             updateCurrentItemStatus(currentItem);
             renderVersionHistory(currentItem);
 
-            const playbackBlob = getPlaybackBlob(currentItem);
+            const playbackBlob = getListeningPlaybackBlob(currentItem);
             if (!playbackBlob) {
                 clearAudioPlayer();
             } else if (syncPlayerToCurrent) {
@@ -1664,11 +1712,25 @@
                 return;
             }
 
+            setBrowsedVersion(currentItem, version.id);
             setAudioPlayerBlob(version.blob, {
                 autoplay: true,
                 showPlayer: true
             });
+            renderVersionHistory(currentItem);
             updateStatus(`Playing ${getItemDisplayWord(currentItem)} · ${getAudioVersionLabel(version)}.`, 'info');
+        }
+
+        function browseCurrentItemVersion(direction) {
+            const currentItem = getCurrentQueueItem();
+            const targetVersion = getCycledAudioVersion(currentItem, direction);
+
+            if (!currentItem || !targetVersion) {
+                updateStatus('Generate audio before browsing saved takes.', 'error');
+                return;
+            }
+
+            playVersionForCurrentItem(targetVersion.id);
         }
 
         function approveVersionForItem(item, versionId, options = {}) {
@@ -1768,6 +1830,16 @@
                     break;
                 case 'f':
                     if (!flagBtn.disabled) clickButton(flagBtn);
+                    break;
+                case 't':
+                    event.preventDefault();
+                    scheduleShortcutFocusRelease();
+                    browseCurrentItemVersion(-1);
+                    break;
+                case 'z':
+                    event.preventDefault();
+                    scheduleShortcutFocusRelease();
+                    browseCurrentItemVersion(1);
                     break;
                 case 'h':
                     event.preventDefault();
