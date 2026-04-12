@@ -255,6 +255,15 @@
                     aria-live="polite"
                 ></p>
                 <audio id="audioPlayer" controls class="w-full mt-4 hidden"></audio>
+                <div class="mt-4 rounded-xl border border-gray-700 bg-gray-900/60 p-4 text-left">
+                    <div class="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                        <p class="text-sm font-semibold text-gray-200">Version History</p>
+                        <p id="versionHistorySummary" class="text-xs text-gray-500">No takes saved yet.</p>
+                    </div>
+                    <div id="versionHistoryList" class="mt-3 space-y-2">
+                        <p class="text-sm text-gray-500">Generate audio to start the version history for this card.</p>
+                    </div>
+                </div>
             </div>
 
             <!-- Review Summary -->
@@ -418,6 +427,8 @@
         const currentItemStatusEl = document.getElementById('currentItemStatus');
         const copyFeedbackEl = document.getElementById('copyFeedback');
         const audioPlayer = document.getElementById('audioPlayer');
+        const versionHistorySummaryEl = document.getElementById('versionHistorySummary');
+        const versionHistoryListEl = document.getElementById('versionHistoryList');
         const reviewSummaryEl = document.getElementById('reviewSummary');
         const reviewHintEl = document.getElementById('reviewHint');
         const previousBtn = document.getElementById('previousBtn');
@@ -477,6 +488,7 @@
         downloadFlaggedTxtBtn.addEventListener('click', downloadFlaggedTxt);
         regenerateFlaggedBtn.addEventListener('click', handleRegenerateFlagged);
         autoGenerateBtn.addEventListener('click', handleAutoGenerateAll);
+        versionHistoryListEl.addEventListener('click', handleVersionHistoryClick);
         window.addEventListener('keydown', handleKeyPress, true);
         generationModeRadios.forEach(radio => {
             radio.addEventListener('change', handleGenerationModeChange);
@@ -935,8 +947,9 @@
                 sourceName: row.sourceName || '',
                 sourceFolder: row.sourceFolder || '',
                 filename: `${filenameBase}.mp3`,
-                audioBlob: null,
-                approvedAudioBlob: null,
+                audioVersions: [],
+                currentVersionId: null,
+                approvedVersionId: null,
                 reviewStatus: 'pending'
             };
         }
@@ -1014,23 +1027,95 @@
             return generationQueue[currentQueueIndex] || null;
         }
 
+        function getAudioVersions(item) {
+            return item && Array.isArray(item.audioVersions) ? item.audioVersions : [];
+        }
+
+        function hasAudioVersions(item) {
+            return getAudioVersions(item).length > 0;
+        }
+
+        function getLatestAudioVersion(item) {
+            const versions = getAudioVersions(item);
+            return versions.length > 0 ? versions[versions.length - 1] : null;
+        }
+
+        function getAudioVersionById(item, versionId) {
+            if (!item || !versionId) return null;
+            return getAudioVersions(item).find(version => version.id === versionId) || null;
+        }
+
+        function getCurrentAudioVersion(item) {
+            return getAudioVersionById(item, item?.currentVersionId) || getLatestAudioVersion(item);
+        }
+
+        function getApprovedAudioVersion(item) {
+            return getAudioVersionById(item, item?.approvedVersionId);
+        }
+
         function getPlaybackBlob(item) {
-            if (!item) return null;
-            return item.audioBlob || item.approvedAudioBlob || null;
+            const version = getCurrentAudioVersion(item);
+            return version ? version.blob : null;
+        }
+
+        function getApprovedBlob(item) {
+            const version = getApprovedAudioVersion(item);
+            return version ? version.blob : null;
         }
 
         function hasApprovedAudio(item) {
-            return Boolean(item && item.approvedAudioBlob);
+            return Boolean(getApprovedBlob(item));
         }
 
         function hasPendingApprovedReplacement(item) {
-            return Boolean(item && item.audioBlob && item.approvedAudioBlob && item.audioBlob !== item.approvedAudioBlob);
+            const currentVersion = getCurrentAudioVersion(item);
+            const approvedVersion = getApprovedAudioVersion(item);
+            return Boolean(currentVersion && approvedVersion && currentVersion.id !== approvedVersion.id);
+        }
+
+        function getAudioVersionLabel(version) {
+            if (!version) return 'Take';
+            return `Take ${version.takeNumber}`;
+        }
+
+        function getAudioVersionSourceLabel(version) {
+            return version?.source === 'generate' ? 'Generate' : 'Regenerate';
+        }
+
+        function formatVersionTimestamp(timestamp) {
+            if (typeof timestamp !== 'number' || Number.isNaN(timestamp)) return '';
+            return new Date(timestamp).toLocaleTimeString([], {
+                hour: 'numeric',
+                minute: '2-digit'
+            });
+        }
+
+        function buildAudioVersionId(item, takeNumber) {
+            return `${item.id}-take-${takeNumber}`;
+        }
+
+        function addAudioVersion(item, blob, source) {
+            if (!item || !blob) return null;
+
+            const versions = Array.isArray(item.audioVersions) ? item.audioVersions : (item.audioVersions = []);
+            const takeNumber = versions.length + 1;
+            const version = {
+                id: buildAudioVersionId(item, takeNumber),
+                takeNumber,
+                blob,
+                source,
+                createdAt: Date.now()
+            };
+
+            versions.push(version);
+            item.currentVersionId = version.id;
+            return version;
         }
 
         function getReviewStatusAfterFlagClear(item) {
             if (!item) return 'pending';
             if (hasApprovedAudio(item)) return 'approved';
-            return getPlaybackBlob(item) ? 'generated' : 'pending';
+            return hasAudioVersions(item) ? 'generated' : 'pending';
         }
 
         function getSelectedVoiceMode() {
@@ -1094,6 +1179,9 @@
         }
 
         function getShortcutTrapElements() {
+            const historyButtons = versionHistoryListEl
+                ? Array.from(versionHistoryListEl.querySelectorAll('button[data-version-action]'))
+                : [];
             return [
                 audioPlayer,
                 previousBtn,
@@ -1106,7 +1194,8 @@
                 downloadZipBtn,
                 downloadApprovedBtn,
                 downloadFlaggedTxtBtn,
-                regenerateFlaggedBtn
+                regenerateFlaggedBtn,
+                ...historyButtons
             ];
         }
 
@@ -1177,12 +1266,12 @@
             generationQueue.forEach(item => {
                 if (item.reviewStatus === 'flagged') {
                     summary.flagged += 1;
-                    if (getPlaybackBlob(item)) {
+                    if (hasAudioVersions(item)) {
                         summary.flaggedWithAudio += 1;
                     }
                 }
 
-                if (!getPlaybackBlob(item)) {
+                if (!hasAudioVersions(item)) {
                     summary.pendingGeneration += 1;
                     return;
                 }
@@ -1209,7 +1298,7 @@
             const perCardCharMap = new Map();
 
             generationQueue.forEach(item => {
-                if (!item || getPlaybackBlob(item)) return;
+                if (!item || hasAudioVersions(item)) return;
 
                 const cleaned = getGenerationTextForItem(item);
                 if (!cleaned) return;
@@ -1233,7 +1322,7 @@
         }
 
         function getReadyItems() {
-            return generationQueue.filter(item => item && getPlaybackBlob(item) && item.reviewStatus !== 'flagged');
+            return generationQueue.filter(item => item && hasAudioVersions(item) && item.reviewStatus !== 'flagged');
         }
 
         function getFlaggedItems() {
@@ -1241,13 +1330,11 @@
         }
 
         function getFlaggedAudioItems() {
-            return generationQueue.filter(item => item && getPlaybackBlob(item) && item.reviewStatus === 'flagged');
+            return generationQueue.filter(item => item && hasAudioVersions(item) && item.reviewStatus === 'flagged');
         }
 
         function getApprovedAudioItems() {
-            return generationQueue
-                .filter(item => item && item.reviewStatus === 'approved' && item.approvedAudioBlob)
-                .map(item => ({ ...item, audioBlob: item.approvedAudioBlob }));
+            return generationQueue.filter(item => item && item.reviewStatus === 'approved' && hasApprovedAudio(item));
         }
 
         function getFlaggedRows() {
@@ -1330,30 +1417,97 @@
                 return;
             }
 
+            const currentVersion = getCurrentAudioVersion(item);
+            const approvedVersion = getApprovedAudioVersion(item);
+            const currentVersionLabel = getAudioVersionLabel(currentVersion);
+            const approvedVersionLabel = getAudioVersionLabel(approvedVersion);
+
             if (item.reviewStatus === 'flagged') {
                 currentItemStatusEl.classList.add('text-amber-400');
-                currentItemStatusEl.textContent = getPlaybackBlob(item)
-                    ? `Flagged for follow-up. Output file is ${getItemZipPath(item)}.`
+                currentItemStatusEl.textContent = hasAudioVersions(item)
+                    ? `Flagged for follow-up. ${getAudioVersions(item).length} take${getAudioVersions(item).length === 1 ? '' : 's'} saved. Output file is ${getItemZipPath(item)}.`
                     : `Flagged for follow-up before generation. Output file will be ${getItemZipPath(item)}.`;
                 return;
             }
 
-            if (!getPlaybackBlob(item)) {
+            if (!hasAudioVersions(item)) {
                 currentItemStatusEl.classList.add('text-gray-500');
                 currentItemStatusEl.textContent = `Not generated yet. Output file will be ${getItemZipPath(item)}.`;
                 return;
             }
 
-            if (item.reviewStatus === 'approved' && hasApprovedAudio(item)) {
+            if (item.reviewStatus === 'approved' && approvedVersion) {
                 currentItemStatusEl.classList.add('text-green-400');
                 currentItemStatusEl.textContent = hasPendingApprovedReplacement(item)
-                    ? `Approved version is saved for export as ${getItemZipPath(item)}. The current regenerated preview is not approved yet.`
-                    : `Approved and ready for export as ${getItemZipPath(item)}.`;
+                    ? `${approvedVersionLabel} is approved for export as ${getItemZipPath(item)}. ${currentVersionLabel} is still just the current preview.`
+                    : `${approvedVersionLabel} is approved and ready for export as ${getItemZipPath(item)}.`;
                 return;
             }
 
             currentItemStatusEl.classList.add('text-indigo-400');
-            currentItemStatusEl.textContent = `Generated and ready for review as ${getItemZipPath(item)}.`;
+            currentItemStatusEl.textContent = `${currentVersionLabel} is generated and ready for review as ${getItemZipPath(item)}.`;
+        }
+
+        function renderVersionHistory(item) {
+            if (!versionHistorySummaryEl || !versionHistoryListEl) return;
+
+            if (!item || !hasAudioVersions(item)) {
+                versionHistorySummaryEl.textContent = 'No takes saved yet.';
+                versionHistoryListEl.innerHTML = '<p class="text-sm text-gray-500">Generate audio to start the version history for this card.</p>';
+                return;
+            }
+
+            const versions = getAudioVersions(item).slice().sort((left, right) => right.takeNumber - left.takeNumber);
+            const currentVersion = getCurrentAudioVersion(item);
+            const approvedVersion = getApprovedAudioVersion(item);
+            const controlsLocked = isAutoGenerating || Boolean(loadingButtonKey);
+            const takeCount = versions.length;
+
+            versionHistorySummaryEl.textContent = approvedVersion
+                ? `${takeCount} take${takeCount === 1 ? '' : 's'} saved. Approved: ${getAudioVersionLabel(approvedVersion)}.`
+                : `${takeCount} take${takeCount === 1 ? '' : 's'} saved. No approved take yet.`;
+
+            versionHistoryListEl.innerHTML = versions.map(version => {
+                const isCurrent = currentVersion && currentVersion.id === version.id;
+                const isApproved = approvedVersion && approvedVersion.id === version.id;
+                const sourceLabel = getAudioVersionSourceLabel(version);
+                const timeLabel = formatVersionTimestamp(version.createdAt);
+                const metaLabel = timeLabel ? `${sourceLabel} · ${timeLabel}` : sourceLabel;
+                const approveDisabled = controlsLocked || isApproved;
+                const playDisabled = controlsLocked;
+                const badgeMarkup = [
+                    isCurrent ? '<span class="rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2 py-0.5 text-xs font-semibold text-indigo-300">Current</span>' : '',
+                    isApproved ? '<span class="rounded-full border border-green-500/40 bg-green-500/10 px-2 py-0.5 text-xs font-semibold text-green-300">Approved</span>' : ''
+                ].filter(Boolean).join('');
+
+                return `
+                    <div class="flex flex-col gap-3 rounded-lg border border-gray-700 bg-gray-900/70 p-3 md:flex-row md:items-center md:justify-between">
+                        <div class="space-y-1">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <p class="text-sm font-semibold text-gray-200">${getAudioVersionLabel(version)}</p>
+                                ${badgeMarkup}
+                            </div>
+                            <p class="text-xs text-gray-500">${metaLabel}</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                data-version-action="play"
+                                data-version-id="${version.id}"
+                                class="rounded-lg bg-gray-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                ${playDisabled ? 'disabled' : ''}
+                            >Play</button>
+                            <button
+                                type="button"
+                                data-version-action="approve"
+                                data-version-id="${version.id}"
+                                class="rounded-lg bg-green-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                ${approveDisabled ? 'disabled' : ''}
+                            >Approve</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
         }
 
         function updateReviewSummary() {
@@ -1390,7 +1544,7 @@
         function updateActionButtons() {
             const currentItem = getCurrentQueueItem();
             const hasItem = Boolean(currentItem);
-            const hasAudio = Boolean(getPlaybackBlob(currentItem));
+            const hasAudio = hasAudioVersions(currentItem);
             const isLocked = isAutoGenerating || Boolean(loadingButtonKey);
 
             previousBtn.innerHTML = BUTTON_LABELS.previous;
@@ -1412,6 +1566,7 @@
             loadingButtonKey = isLoading ? buttonKey : null;
             updateReviewSummary();
             updateActionButtons();
+            renderVersionHistory(getCurrentQueueItem());
         }
 
         function updateProgress() {
@@ -1441,7 +1596,7 @@
         }
 
         function updateUIForCurrentItem(options = {}) {
-            const { autoplayAudio = false } = options;
+            const { autoplayAudio = false, syncPlayerToCurrent = true } = options;
             hideCopyFeedback();
 
             if (generationQueue.length === 0) {
@@ -1451,6 +1606,7 @@
                 setCopyPayload(currentWordEl, '', 'Current word');
                 setCopyPayload(currentTextEl, '', currentTextLabelEl.textContent);
                 updateCurrentItemStatus(null);
+                renderVersionHistory(null);
                 clearAudioPlayer();
                 updateProgress();
                 updateReviewSummary();
@@ -1467,15 +1623,16 @@
             setCopyPayload(currentWordEl, currentItem.word || getItemDisplayWord(currentItem), 'Current word');
             setCopyPayload(currentTextEl, getItemReviewText(currentItem) === '-' ? '' : getItemReviewText(currentItem), currentTextLabelEl.textContent);
             updateCurrentItemStatus(currentItem);
+            renderVersionHistory(currentItem);
 
             const playbackBlob = getPlaybackBlob(currentItem);
-            if (playbackBlob) {
+            if (!playbackBlob) {
+                clearAudioPlayer();
+            } else if (syncPlayerToCurrent) {
                 setAudioPlayerBlob(playbackBlob, {
                     showPlayer: true,
                     autoplay: autoplayAudio
                 });
-            } else {
-                clearAudioPlayer();
             }
 
             updateProgress();
@@ -1497,6 +1654,83 @@
         }
 
         // --- Core Functions ---
+
+        function playVersionForCurrentItem(versionId) {
+            const currentItem = getCurrentQueueItem();
+            const version = getAudioVersionById(currentItem, versionId);
+
+            if (!currentItem || !version) {
+                updateStatus('That saved take is no longer available.', 'error');
+                return;
+            }
+
+            setAudioPlayerBlob(version.blob, {
+                autoplay: true,
+                showPlayer: true
+            });
+            updateStatus(`Playing ${getItemDisplayWord(currentItem)} · ${getAudioVersionLabel(version)}.`, 'info');
+        }
+
+        function approveVersionForItem(item, versionId, options = {}) {
+            const {
+                silent = false,
+                advance = false,
+                syncPlayerToCurrent = true
+            } = options;
+
+            const version = getAudioVersionById(item, versionId);
+            if (!item || !version) {
+                if (!silent) {
+                    updateStatus('Generate audio before approving.', 'error');
+                }
+                return false;
+            }
+
+            item.reviewStatus = 'approved';
+            item.approvedVersionId = version.id;
+            lastGeneratedBlob = version.blob;
+
+            if (!silent) {
+                updateStatus(`Approved ${getItemDisplayWord(item)} with ${getAudioVersionLabel(version)}.`, 'success');
+            }
+
+            if (advance) {
+                const moved = moveQueueIndexInReviewDirection();
+                updateUIForCurrentItem({ autoplayAudio: moved, syncPlayerToCurrent: true });
+                return true;
+            }
+
+            updateUIForCurrentItem({ autoplayAudio: false, syncPlayerToCurrent });
+            return true;
+        }
+
+        function handleVersionHistoryClick(event) {
+            const button = event.target.closest('button[data-version-action]');
+            if (!button || !versionHistoryListEl.contains(button)) return;
+
+            scheduleShortcutFocusRelease(button);
+            const action = button.dataset.versionAction;
+            const versionId = button.dataset.versionId;
+
+            if (!versionId) {
+                updateStatus('Missing saved take information.', 'error');
+                return;
+            }
+
+            if (action === 'play') {
+                playVersionForCurrentItem(versionId);
+                return;
+            }
+
+            if (action === 'approve') {
+                const currentItem = getCurrentQueueItem();
+                approveVersionForItem(currentItem, versionId, {
+                    silent: false,
+                    advance: false,
+                    syncPlayerToCurrent: false
+                });
+            }
+        }
 
         function handleKeyPress(event) {
             const tagName = typeof event.target?.tagName === 'string' ? event.target.tagName : '';
@@ -1779,17 +2013,19 @@
                 }
 
                 const blob = await response.blob();
-                targetItem.audioBlob = blob;
+                const version = addAudioVersion(targetItem, blob, isRegen ? 'regenerate' : 'generate');
                 if (targetItem.reviewStatus !== 'flagged') {
                     targetItem.reviewStatus = getReviewStatusAfterFlagClear(targetItem);
                 }
-                lastGeneratedBlob = blob;
+                lastGeneratedBlob = version ? version.blob : blob;
 
                 if (targetIndex === currentQueueIndex) {
-                    setAudioPlayerBlob(blob, {
+                    setAudioPlayerBlob(version ? version.blob : blob, {
                         autoplay: !skipPlayback,
                         showPlayer: !skipPlayback
                     });
+                    updateCurrentItemStatus(targetItem);
+                    renderVersionHistory(targetItem);
                 }
 
                 if (!silentStatus) {
@@ -1831,26 +2067,19 @@
             const { silent = false, advance = true } = options;
             const currentItem = getCurrentQueueItem();
 
-            const playbackBlob = getPlaybackBlob(currentItem);
-            if (!currentItem || !playbackBlob) {
+            const currentVersion = getCurrentAudioVersion(currentItem);
+            if (!currentItem || !currentVersion) {
                 if (!silent) {
                     updateStatus('Generate audio before approving.', 'error');
                 }
                 return;
             }
 
-            currentItem.reviewStatus = 'approved';
-            currentItem.approvedAudioBlob = playbackBlob;
-            lastGeneratedBlob = playbackBlob;
-
-            if (!silent) {
-                updateStatus(`Approved ${getItemDisplayWord(currentItem)}.`, 'success');
-            }
-
-            if (advance) {
-                moveQueueIndexInReviewDirection();
-            }
-            updateUIForCurrentItem({ autoplayAudio: true });
+            approveVersionForItem(currentItem, currentVersion.id, {
+                silent,
+                advance,
+                syncPlayerToCurrent: true
+            });
         }
 
         function toggleFlagForCurrentItem(options = {}) {
@@ -1906,7 +2135,7 @@
             }
 
             const missingIndexes = generationQueue
-                .map((item, index) => (item && !getPlaybackBlob(item) ? index : -1))
+                .map((item, index) => (item && !hasAudioVersions(item) ? index : -1))
                 .filter(index => index !== -1);
 
             if (missingIndexes.length === 0) {
@@ -2010,7 +2239,7 @@
                 updateUIForCurrentItem();
                 setAutoModeMessage(`Processing flagged clip ${position + 1} of ${flaggedIndexes.length}...`);
 
-                const success = await processGeneration(Boolean(targetItem && getPlaybackBlob(targetItem)), {
+                const success = await processGeneration(Boolean(targetItem && hasAudioVersions(targetItem)), {
                     skipPlayback: true,
                     silentStatus: true,
                     manageLoadingState: false,
@@ -2057,13 +2286,13 @@
             return `${path.slice(0, dotIndex)}__${occurrence}${path.slice(dotIndex)}`;
         }
 
-        function buildZipEntries(items) {
+        function buildZipEntries(items, resolveBlob = getPlaybackBlob) {
             const seenPaths = new Map();
 
             return items
-                .filter(item => item && getPlaybackBlob(item))
+                .filter(item => item && resolveBlob(item))
                 .map(item => {
-                    const blob = getPlaybackBlob(item);
+                    const blob = resolveBlob(item);
                     const basePath = getItemZipPath(item);
                     const occurrence = (seenPaths.get(basePath) || 0) + 1;
                     seenPaths.set(basePath, occurrence);
@@ -2074,7 +2303,7 @@
                 });
         }
 
-        async function downloadItemsAsZip(items, fileName, emptyMessage, successMessage) {
+        async function downloadItemsAsZip(items, fileName, emptyMessage, successMessage, resolveBlob = getPlaybackBlob) {
             if (!items.length) {
                 updateStatus(emptyMessage, 'error');
                 return;
@@ -2082,7 +2311,7 @@
 
             updateStatus('Creating ZIP file... please wait.', 'loading');
             const zip = new JSZip();
-            buildZipEntries(items).forEach(entry => {
+            buildZipEntries(items, resolveBlob).forEach(entry => {
                 zip.file(entry.path, entry.blob);
             });
 
@@ -2109,7 +2338,8 @@
                 getApprovedAudioItems(),
                 'anki_approved_audio_files.zip',
                 'No approved audio files to download.',
-                'Approved ZIP downloaded successfully!'
+                'Approved ZIP downloaded successfully!',
+                getApprovedBlob
             );
         }
 
