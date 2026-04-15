@@ -407,6 +407,7 @@
         const DEFAULT_TTS_MODEL_ID = 'eleven_v3';
         const BALANCE_REFRESH_INTERVAL_MS = 60000;
         const AUTO_GENERATE_DELAY_MS = 10;
+        const APPROVE_LONG_PRESS_MS = 250;
         const SHORTCUT_REPEAT_INITIAL_DELAY_MS = 250;
         const SHORTCUT_REPEAT_INTERVAL_MS = 75;
         const PROMPTED_WORD_PREFIX = 'Das Wort ist:';
@@ -480,11 +481,11 @@
         let activeAudioUrl = null;
         let loadingButtonKey = null;
         let copyFeedbackTimerId = null;
+        let approveLongPressTimerId = null;
         let heldShortcutKey = null;
         let heldShortcutDelayTimerId = null;
         let heldShortcutIntervalId = null;
         const REPEATABLE_SHORTCUT_KEYS = new Set([
-            'a',
             'arrowleft',
             'arrowright',
             'b',
@@ -515,7 +516,7 @@
         versionHistoryListEl.addEventListener('click', handleVersionHistoryClick);
         window.addEventListener('keydown', handleKeyPress, true);
         window.addEventListener('keyup', handleKeyRelease, true);
-        window.addEventListener('blur', stopHeldShortcut, true);
+        window.addEventListener('blur', stopAllHeldShortcuts, true);
         generationModeRadios.forEach(radio => {
             radio.addEventListener('change', handleGenerationModeChange);
         });
@@ -1943,9 +1944,25 @@
             }
         }
 
+        function clearApproveLongPress() {
+            if (approveLongPressTimerId !== null) {
+                window.clearTimeout(approveLongPressTimerId);
+                approveLongPressTimerId = null;
+            }
+        }
+
+        function stopApproveLongPress() {
+            clearApproveLongPress();
+        }
+
         function stopHeldShortcut() {
             heldShortcutKey = null;
             clearHeldShortcutTimers();
+        }
+
+        function stopAllHeldShortcuts() {
+            stopApproveLongPress();
+            stopHeldShortcut();
         }
 
         function executeShortcutAction(key, options = {}) {
@@ -2038,6 +2055,22 @@
             }
 
             const key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
+            if (key === 'a') {
+                event.preventDefault();
+
+                if (event.repeat || approveBtn.disabled) {
+                    return;
+                }
+
+                stopApproveLongPress();
+                approveLongPressTimerId = window.setTimeout(() => {
+                    approveLongPressTimerId = null;
+                    scheduleShortcutFocusRelease();
+                    handleApprove({ advance: false });
+                }, APPROVE_LONG_PRESS_MS);
+                return;
+            }
+
             if (event.repeat) {
                 event.preventDefault();
                 return;
@@ -2061,6 +2094,15 @@
 
         function handleKeyRelease(event) {
             const key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
+            if (key === 'a') {
+                if (approveLongPressTimerId !== null) {
+                    clearApproveLongPress();
+                    scheduleShortcutFocusRelease();
+                    handleApprove({ advance: true });
+                }
+                return;
+            }
+
             if (key && heldShortcutKey === key) {
                 stopHeldShortcut();
             }
