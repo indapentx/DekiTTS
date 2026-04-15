@@ -479,6 +479,7 @@
         let loadingButtonKey = null;
         let copyFeedbackTimerId = null;
         const REPEATABLE_SHORTCUT_KEYS = new Set([
+            'a',
             'arrowleft',
             'arrowright',
             'b',
@@ -1115,6 +1116,39 @@
             return generationQueue[currentQueueIndex] || null;
         }
 
+        function getProgressMetrics() {
+            const totalItems = generationQueue.length;
+            if (totalItems === 0) {
+                return { current: 0, total: 0 };
+            }
+
+            clampCurrentQueueIndex();
+
+            if (!isFlaggedOnlyMode) {
+                return { current: currentQueueIndex + 1, total: totalItems };
+            }
+
+            const totalFlaggedItems = getFlaggedItems().length;
+            if (totalFlaggedItems === 0) {
+                return { current: 0, total: 0 };
+            }
+
+            const currentItem = generationQueue[currentQueueIndex] || null;
+            if (!currentItem || currentItem.reviewStatus !== 'flagged') {
+                return { current: 0, total: totalFlaggedItems };
+            }
+
+            const flaggedPosition = generationQueue
+                .slice(0, currentQueueIndex + 1)
+                .filter(item => item && item.reviewStatus === 'flagged')
+                .length;
+
+            return {
+                current: flaggedPosition,
+                total: totalFlaggedItems
+            };
+        }
+
         function getAudioVersions(item) {
             return item && Array.isArray(item.audioVersions) ? item.audioVersions : [];
         }
@@ -1712,17 +1746,15 @@
         }
 
         function updateProgress() {
-            const totalItems = generationQueue.length;
-            if (totalItems === 0) {
+            const { current, total } = getProgressMetrics();
+            if (total === 0) {
                 progressCounter.textContent = '0 / 0';
                 progressBar.style.width = '0%';
                 return;
             }
 
-            clampCurrentQueueIndex();
-            const displayCurrent = currentQueueIndex + 1;
-            progressCounter.textContent = `${displayCurrent} / ${totalItems}`;
-            progressBar.style.width = `${(displayCurrent / totalItems) * 100}%`;
+            progressCounter.textContent = `${current} / ${total}`;
+            progressBar.style.width = `${(current / total) * 100}%`;
         }
 
         function setAutoGenerateButtonState(isRunning) {
