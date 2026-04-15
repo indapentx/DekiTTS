@@ -407,6 +407,8 @@
         const DEFAULT_TTS_MODEL_ID = 'eleven_v3';
         const BALANCE_REFRESH_INTERVAL_MS = 60000;
         const AUTO_GENERATE_DELAY_MS = 10;
+        const SHORTCUT_REPEAT_INITIAL_DELAY_MS = 250;
+        const SHORTCUT_REPEAT_INTERVAL_MS = 75;
         const PROMPTED_WORD_PREFIX = 'Das Wort ist:';
         const BUTTON_LABELS = {
             previous: 'Previous<kbd>B</kbd>',
@@ -478,6 +480,9 @@
         let activeAudioUrl = null;
         let loadingButtonKey = null;
         let copyFeedbackTimerId = null;
+        let heldShortcutKey = null;
+        let heldShortcutDelayTimerId = null;
+        let heldShortcutIntervalId = null;
         const REPEATABLE_SHORTCUT_KEYS = new Set([
             'a',
             'arrowleft',
@@ -509,6 +514,8 @@
         autoGenerateBtn.addEventListener('click', handleAutoGenerateAll);
         versionHistoryListEl.addEventListener('click', handleVersionHistoryClick);
         window.addEventListener('keydown', handleKeyPress, true);
+        window.addEventListener('keyup', handleKeyRelease, true);
+        window.addEventListener('blur', stopHeldShortcut, true);
         generationModeRadios.forEach(radio => {
             radio.addEventListener('change', handleGenerationModeChange);
         });
@@ -1886,7 +1893,7 @@
                 const moved = moveQueueIndexInReviewDirection()
                     || syncCurrentItemToReviewFilter({ preferredDirection: reviewAdvanceDirection });
                 updateUIForCurrentItem({ autoplayAudio: moved, syncPlayerToCurrent: true });
-                return true;
+                return moved;
             }
 
             const movedToFilteredItem = syncCurrentItemToReviewFilter({ preferredDirection: reviewAdvanceDirection });
@@ -1925,9 +1932,103 @@
             }
         }
 
-        function isRepeatableShortcut(event, key) {
-            if (event.code === 'Space') return false;
-            return REPEATABLE_SHORTCUT_KEYS.has(key);
+        function clearHeldShortcutTimers() {
+            if (heldShortcutDelayTimerId !== null) {
+                window.clearTimeout(heldShortcutDelayTimerId);
+                heldShortcutDelayTimerId = null;
+            }
+            if (heldShortcutIntervalId !== null) {
+                window.clearInterval(heldShortcutIntervalId);
+                heldShortcutIntervalId = null;
+            }
+        }
+
+        function stopHeldShortcut() {
+            heldShortcutKey = null;
+            clearHeldShortcutTimers();
+        }
+
+        function executeShortcutAction(key, options = {}) {
+            const { isRepeat = false } = options;
+
+            switch (key) {
+                case 'b':
+                case 'arrowleft':
+                    if (previousBtn.disabled) return false;
+                    scheduleShortcutFocusRelease();
+                    moveToPreviousItem();
+                    return true;
+                case 'g':
+                    if (generateBtn.disabled) return false;
+                    scheduleShortcutFocusRelease();
+                    void processGeneration(false);
+                    return true;
+                case 'r':
+                    if (regenerateBtn.disabled) return false;
+                    scheduleShortcutFocusRelease();
+                    void processGeneration(true);
+                    return true;
+                case 'a':
+                    if (approveBtn.disabled) return false;
+                    scheduleShortcutFocusRelease();
+                    return Boolean(handleApprove({ silent: isRepeat, advance: true }));
+                case 'f':
+                    if (flagBtn.disabled) return false;
+                    scheduleShortcutFocusRelease();
+                    toggleFlagForCurrentItem({ silent: isRepeat, advance: true });
+                    return true;
+                case 't':
+                    scheduleShortcutFocusRelease();
+                    browseCurrentItemVersion(-1);
+                    return true;
+                case 'z':
+                    scheduleShortcutFocusRelease();
+                    browseCurrentItemVersion(1);
+                    return true;
+                case 'h':
+                    scheduleShortcutFocusRelease();
+                    void copyCurrentWordShortcut();
+                    return true;
+                case 'j':
+                    scheduleShortcutFocusRelease();
+                    void copyCurrentRowReviewTextShortcut();
+                    return true;
+                case 'k':
+                    scheduleShortcutFocusRelease();
+                    void copyCurrentRowFilenameShortcut();
+                    return true;
+                case 'n':
+                case 's':
+                case 'arrowright':
+                    if (nextBtn.disabled) return false;
+                    scheduleShortcutFocusRelease();
+                    moveToNextItem();
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        function startHeldShortcut(key) {
+            if (!REPEATABLE_SHORTCUT_KEYS.has(key)) return;
+
+            stopHeldShortcut();
+            heldShortcutKey = key;
+            heldShortcutDelayTimerId = window.setTimeout(() => {
+                if (heldShortcutKey !== key) return;
+
+                heldShortcutIntervalId = window.setInterval(() => {
+                    if (heldShortcutKey !== key) {
+                        stopHeldShortcut();
+                        return;
+                    }
+
+                    const handled = executeShortcutAction(key, { isRepeat: true });
+                    if (!handled) {
+                        stopHeldShortcut();
+                    }
+                }, SHORTCUT_REPEAT_INTERVAL_MS);
+            }, SHORTCUT_REPEAT_INITIAL_DELAY_MS);
         }
 
         function handleKeyPress(event) {
@@ -1937,16 +2038,10 @@
             }
 
             const key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
-            if (event.repeat && !isRepeatableShortcut(event, key)) {
+            if (event.repeat) {
                 event.preventDefault();
                 return;
             }
-
-            const clickButton = (button) => {
-                event.preventDefault();
-                scheduleShortcutFocusRelease();
-                button.click();
-            };
 
             if (event.code === 'Space') {
                 event.preventDefault();
@@ -1955,53 +2050,19 @@
                 return;
             }
 
-            switch (key) {
-                case 'b':
-                case 'arrowleft':
-                    if (!previousBtn.disabled) clickButton(previousBtn);
-                    break;
-                case 'g':
-                    if (!generateBtn.disabled) clickButton(generateBtn);
-                    break;
-                case 'r':
-                    if (!regenerateBtn.disabled) clickButton(regenerateBtn);
-                    break;
-                case 'a':
-                    if (!approveBtn.disabled) clickButton(approveBtn);
-                    break;
-                case 'f':
-                    if (!flagBtn.disabled) clickButton(flagBtn);
-                    break;
-                case 't':
-                    event.preventDefault();
-                    scheduleShortcutFocusRelease();
-                    browseCurrentItemVersion(-1);
-                    break;
-                case 'z':
-                    event.preventDefault();
-                    scheduleShortcutFocusRelease();
-                    browseCurrentItemVersion(1);
-                    break;
-                case 'h':
-                    event.preventDefault();
-                    scheduleShortcutFocusRelease();
-                    void copyCurrentWordShortcut();
-                    break;
-                case 'j':
-                    event.preventDefault();
-                    scheduleShortcutFocusRelease();
-                    void copyCurrentRowReviewTextShortcut();
-                    break;
-                case 'k':
-                    event.preventDefault();
-                    scheduleShortcutFocusRelease();
-                    void copyCurrentRowFilenameShortcut();
-                    break;
-                case 'n':
-                case 's':
-                case 'arrowright':
-                    if (!nextBtn.disabled) clickButton(nextBtn);
-                    break;
+            const handled = executeShortcutAction(key);
+            if (handled) {
+                event.preventDefault();
+                if (!event.repeat && REPEATABLE_SHORTCUT_KEYS.has(key)) {
+                    startHeldShortcut(key);
+                }
+            }
+        }
+
+        function handleKeyRelease(event) {
+            const key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
+            if (key && heldShortcutKey === key) {
+                stopHeldShortcut();
             }
         }
 
@@ -2184,6 +2245,7 @@
             const payload = {
                 text: textToGenerate,
                 model_id: selectedModelId,
+                apply_text_normalization: 'on',
                 voice_settings: {
                     stability,
                     similarity_boost: 0.75,
@@ -2318,10 +2380,10 @@
                 if (!silent) {
                     updateStatus('Generate audio before approving.', 'error');
                 }
-                return;
+                return false;
             }
 
-            approveVersionForItem(currentItem, currentVersion.id, {
+            return approveVersionForItem(currentItem, currentVersion.id, {
                 silent,
                 advance,
                 syncPlayerToCurrent: true
