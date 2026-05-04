@@ -191,7 +191,7 @@
                 <label class="block text-sm font-medium text-gray-400 mb-2">5. Start the Process</label>
                 <button id="loadFileBtn"
                     class="w-full max-w-sm mx-auto bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-105">
-                    Load File & Start
+                    Load File & Start<kbd>I</kbd>
                 </button>
             </div>
         </div>
@@ -482,6 +482,7 @@
         let loadingButtonKey = null;
         let copyFeedbackTimerId = null;
         let approveLongPressTimerId = null;
+        let shouldLoadFileAfterShortcutSelection = false;
         let heldShortcutKey = null;
         let heldShortcutDelayTimerId = null;
         let heldShortcutIntervalId = null;
@@ -501,6 +502,7 @@
 
         // --- Event Listeners ---
         loadFileBtn.addEventListener('click', handleFileLoad);
+        fileInput.addEventListener('change', handleShortcutFileSelection);
         previousBtn.addEventListener('click', moveToPreviousItem);
         generateBtn.addEventListener('click', () => processGeneration(false));
         regenerateBtn.addEventListener('click', () => processGeneration(true));
@@ -2106,6 +2108,9 @@
                     scheduleShortcutFocusRelease();
                     browseCurrentItemVersion(1);
                     return true;
+                case 'i':
+                    scheduleShortcutFocusRelease();
+                    return requestFileImport();
                 case 'h':
                     scheduleShortcutFocusRelease();
                     void copyCurrentWordShortcut();
@@ -2150,6 +2155,34 @@
                     }
                 }, SHORTCUT_REPEAT_INTERVAL_MS);
             }, SHORTCUT_REPEAT_INITIAL_DELAY_MS);
+        }
+
+        function clearShortcutFileImportAfterCancel() {
+            window.setTimeout(() => {
+                if (fileInput.files && fileInput.files.length > 0) return;
+                shouldLoadFileAfterShortcutSelection = false;
+            }, 0);
+        }
+
+        function requestFileImport() {
+            if (isAutoGenerating || loadingButtonKey) {
+                updateStatus('Wait for the current operation to finish before importing a file.', 'info');
+                return false;
+            }
+
+            shouldLoadFileAfterShortcutSelection = true;
+            fileInput.value = '';
+            fileInput.click();
+            window.setTimeout(() => {
+                window.addEventListener('focus', clearShortcutFileImportAfterCancel, { once: true });
+            }, 0);
+            return true;
+        }
+
+        function handleShortcutFileSelection() {
+            if (!shouldLoadFileAfterShortcutSelection) return;
+            shouldLoadFileAfterShortcutSelection = false;
+            void handleFileLoad();
         }
 
         function handleKeyPress(event) {
