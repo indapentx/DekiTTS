@@ -1956,6 +1956,16 @@
             playVersionForCurrentItem(targetVersion.id);
         }
 
+        async function approveAndRegenerateCurrentItem() {
+            const approved = handleApprove({
+                advance: false
+            });
+
+            if (!approved) return false;
+
+            return processGeneration(true);
+        }
+
         function approveVersionForItem(item, versionId, options = {}) {
             const {
                 silent = false,
@@ -2160,7 +2170,7 @@
                 approveLongPressTimerId = window.setTimeout(() => {
                     approveLongPressTimerId = null;
                     scheduleShortcutFocusRelease();
-                    handleApprove({ advance: false });
+                    void approveAndRegenerateCurrentItem();
                 }, APPROVE_LONG_PRESS_MS);
                 return;
             }
