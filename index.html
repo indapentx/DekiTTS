@@ -191,7 +191,7 @@
                 <label class="block text-sm font-medium text-gray-400 mb-2">5. Start the Process</label>
                 <button id="loadFileBtn"
                     class="w-full max-w-sm mx-auto bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-105">
-                    Load File & Start<kbd>I</kbd>
+                    Load File & Start<kbd>Q</kbd>
                 </button>
             </div>
         </div>
@@ -299,7 +299,7 @@
             <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
                 <button id="previousBtn"
                     class="bg-gray-700 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-transform transform hover:scale-105 btn-disabled"
-                    disabled>Previous<kbd>B</kbd></button>
+                    disabled>Previous<kbd>N</kbd></button>
                 <button id="generateBtn"
                     class="bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform transform hover:scale-105">Generate<kbd>G</kbd></button>
                 <button id="regenerateBtn"
@@ -313,7 +313,7 @@
                     disabled>Flag<kbd>F</kbd></button>
                 <button id="nextBtn"
                     class="bg-gray-700 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-transform transform hover:scale-105 btn-disabled"
-                    disabled>Next<kbd>N</kbd></button>
+                    disabled>Next<kbd>M</kbd></button>
             </div>
 
             <!-- Download Section -->
@@ -411,12 +411,12 @@
         const SHORTCUT_REPEAT_INTERVAL_MS = 75;
         const PROMPTED_WORD_PREFIX = 'Das Wort ist...';
         const BUTTON_LABELS = {
-            previous: 'Previous<kbd>B</kbd>',
+            previous: 'Previous<kbd>N</kbd>',
             generate: 'Generate<kbd>G</kbd>',
             regenerate: 'Regenerate<kbd>R</kbd>',
             approve: 'Approve<kbd>A</kbd>',
             flag: 'Flag<kbd>F</kbd>',
-            next: 'Next<kbd>N</kbd>'
+            next: 'Next<kbd>M</kbd>'
         };
         const SPINNER_MARKUP = '<div class="spinner w-5 h-5 mx-auto border-2 border-gray-400 rounded-full"></div>';
 
@@ -488,9 +488,8 @@
         const REPEATABLE_SHORTCUT_KEYS = new Set([
             'arrowleft',
             'arrowright',
-            'b',
+            'm',
             'n',
-            's',
             't',
             'z'
         ]);
@@ -2074,7 +2073,7 @@
             const { isRepeat = false } = options;
 
             switch (key) {
-                case 'b':
+                case 'n':
                 case 'arrowleft':
                     if (previousBtn.disabled) return false;
                     scheduleShortcutFocusRelease();
@@ -2107,7 +2106,7 @@
                     scheduleShortcutFocusRelease();
                     browseCurrentItemVersion(1);
                     return true;
-                case 'i':
+                case 'q':
                     scheduleShortcutFocusRelease();
                     return requestFileImport();
                 case 'h':
@@ -2122,8 +2121,7 @@
                     scheduleShortcutFocusRelease();
                     void copyCurrentRowFilenameShortcut();
                     return true;
-                case 'n':
-                case 's':
+                case 'm':
                 case 'arrowright':
                     if (nextBtn.disabled) return false;
                     scheduleShortcutFocusRelease();
