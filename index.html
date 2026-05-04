@@ -977,6 +977,7 @@
                 audioVersions: [],
                 currentVersionId: null,
                 approvedVersionId: null,
+                approvalHistory: [],
                 browsedVersionId: null,
                 reviewStatus: 'pending'
             };
@@ -1183,6 +1184,47 @@
             return getAudioVersionById(item, item?.approvedVersionId);
         }
 
+        function getApprovalHistory(item) {
+            return item && Array.isArray(item.approvalHistory) ? item.approvalHistory : [];
+        }
+
+        function ensureApprovalHistory(item) {
+            if (!item) return [];
+            if (!Array.isArray(item.approvalHistory)) {
+                item.approvalHistory = [];
+            }
+            return item.approvalHistory;
+        }
+
+        function getApprovalEntriesForVersion(item, versionId) {
+            if (!item || !versionId) return [];
+            return getApprovalHistory(item).filter(entry => entry && entry.versionId === versionId);
+        }
+
+        function getApprovalEntryOrder(entry, index) {
+            const order = Number(entry?.order);
+            return Number.isInteger(order) && order > 0 ? order : index + 1;
+        }
+
+        function buildApprovalHistoryEntryId(item, order) {
+            return `${item.id}-approval-${order}`;
+        }
+
+        function addApprovalHistoryEntry(item, version) {
+            if (!item || !version) return null;
+            const history = ensureApprovalHistory(item);
+            const order = history.length + 1;
+            const entry = {
+                id: buildApprovalHistoryEntryId(item, order),
+                order,
+                versionId: version.id,
+                takeNumber: version.takeNumber,
+                approvedAt: Date.now()
+            };
+            history.push(entry);
+            return entry;
+        }
+
         function getBrowsedAudioVersion(item) {
             return getAudioVersionById(item, item?.browsedVersionId);
         }
@@ -1231,6 +1273,11 @@
                 hour: 'numeric',
                 minute: '2-digit'
             });
+        }
+
+        function formatApprovalTimestamp(timestamp) {
+            const formatted = formatVersionTimestamp(timestamp);
+            return formatted ? ` at ${formatted}` : '';
         }
 
         function buildAudioVersionId(item, takeNumber) {
@@ -1635,14 +1682,47 @@
             const currentVersion = getCurrentAudioVersion(item);
             const approvedVersion = getApprovedAudioVersion(item);
             const browsedVersion = getBrowsedAudioVersion(item);
+            const approvalHistory = getApprovalHistory(item);
             const controlsLocked = isAutoGenerating || Boolean(loadingButtonKey);
             const takeCount = versions.length;
+            const approvalCount = approvalHistory.length;
+            const latestApprovalEntry = approvalHistory[approvalHistory.length - 1] || null;
 
             versionHistorySummaryEl.textContent = approvedVersion
-                ? `${takeCount} take${takeCount === 1 ? '' : 's'} saved. Approved: ${getAudioVersionLabel(approvedVersion)}.`
+                ? `${takeCount} take${takeCount === 1 ? '' : 's'} saved. Approved: ${getAudioVersionLabel(approvedVersion)}. ${approvalCount} approval${approvalCount === 1 ? '' : 's'} logged.`
                 : `${takeCount} take${takeCount === 1 ? '' : 's'} saved. No approved take yet.`;
 
-            versionHistoryListEl.innerHTML = versions.map(version => {
+            const approvalLogMarkup = approvalHistory.length > 0
+                ? `
+                    <div class="rounded-lg border border-green-500/20 bg-green-500/5 p-3">
+                        <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                            <p class="text-xs font-semibold uppercase text-green-300">Approval Log</p>
+                            <p class="text-xs text-gray-500">Chronological approved takes.</p>
+                        </div>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            ${approvalHistory.map((entry, index) => {
+                                const order = getApprovalEntryOrder(entry, index);
+                                const version = getAudioVersionById(item, entry.versionId);
+                                const isCurrentApproval = approvedVersion && latestApprovalEntry && latestApprovalEntry.id === entry.id;
+                                const takeLabel = version ? getAudioVersionLabel(version) : `Take ${entry.takeNumber || '?'}`;
+                                const timeLabel = formatApprovalTimestamp(entry.approvedAt);
+                                const currentLabel = isCurrentApproval ? ' · current' : '';
+                                return `
+                                    <button
+                                        type="button"
+                                        data-version-action="play"
+                                        data-version-id="${entry.versionId}"
+                                        class="rounded-full border border-green-500/30 bg-green-500/10 px-3 py-1 text-xs font-semibold text-green-100 transition hover:bg-green-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                        ${controlsLocked || !version ? 'disabled' : ''}
+                                    >#${order} ${takeLabel}${timeLabel}${currentLabel}</button>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `
+                : '';
+
+            const versionRowsMarkup = versions.map(version => {
                 const isCurrent = currentVersion && currentVersion.id === version.id;
                 const isApproved = approvedVersion && approvedVersion.id === version.id;
                 const isListening = browsedVersion && browsedVersion.id === version.id;
@@ -1651,9 +1731,16 @@
                 const metaLabel = timeLabel ? `${sourceLabel} · ${timeLabel}` : sourceLabel;
                 const approveDisabled = controlsLocked || isApproved;
                 const playDisabled = controlsLocked;
+                const versionApprovalEntries = getApprovalEntriesForVersion(item, version.id);
+                const approvalBadgeMarkup = versionApprovalEntries.map(entry => {
+                    const index = approvalHistory.indexOf(entry);
+                    const order = getApprovalEntryOrder(entry, index);
+                    return `<span class="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-xs font-semibold text-green-300">Approved #${order}</span>`;
+                }).join('');
                 const badgeMarkup = [
                     isCurrent ? '<span class="rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2 py-0.5 text-xs font-semibold text-indigo-300">Current</span>' : '',
                     isApproved ? '<span class="rounded-full border border-green-500/40 bg-green-500/10 px-2 py-0.5 text-xs font-semibold text-green-300">Approved</span>' : '',
+                    approvalBadgeMarkup,
                     isListening ? '<span class="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-300">Listening</span>' : ''
                 ].filter(Boolean).join('');
 
@@ -1685,6 +1772,8 @@
                     </div>
                 `;
             }).join('');
+
+            versionHistoryListEl.innerHTML = [approvalLogMarkup, versionRowsMarkup].filter(Boolean).join('');
         }
 
         function updateReviewSummary() {
@@ -1882,12 +1971,17 @@
                 return false;
             }
 
+            const approvalEntry = item.approvedVersionId !== version.id
+                ? addApprovalHistoryEntry(item, version)
+                : null;
+
             item.reviewStatus = 'approved';
             item.approvedVersionId = version.id;
             lastGeneratedBlob = version.blob;
 
             if (!silent) {
-                updateStatus(`Approved ${getItemDisplayWord(item)} with ${getAudioVersionLabel(version)}.`, 'success');
+                const approvalSuffix = approvalEntry ? ` Approval #${approvalEntry.order} logged.` : '';
+                updateStatus(`Approved ${getItemDisplayWord(item)} with ${getAudioVersionLabel(version)}.${approvalSuffix}`, 'success');
             }
 
             if (advance) {
