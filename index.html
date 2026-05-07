@@ -470,6 +470,7 @@
         let consecutivePreviousMoves = 0;
         const REVERSE_REVIEW_TRIGGER_STEPS = 2;
         let isFlaggedOnlyMode = false;
+        let flaggedOnlySessionItemIds = new Set();
         let lastGeneratedBlob = null;
         let generationMode = 'sentences';
         let balanceRefreshTimerId = null;
@@ -1038,7 +1039,23 @@
 
         function resetFlaggedOnlyMode() {
             isFlaggedOnlyMode = false;
+            flaggedOnlySessionItemIds = new Set();
             flaggedOnlyToggle.checked = false;
+        }
+
+        function startFlaggedOnlySession() {
+            const flaggedItems = getFlaggedItems();
+            flaggedOnlySessionItemIds = new Set(flaggedItems.map(item => item.id));
+            return flaggedItems.length;
+        }
+
+        function isItemInFlaggedOnlySession(item) {
+            return Boolean(item && flaggedOnlySessionItemIds.has(item.id));
+        }
+
+        function getFlaggedOnlySessionItems() {
+            if (!isFlaggedOnlyMode || flaggedOnlySessionItemIds.size === 0) return [];
+            return generationQueue.filter(item => isItemInFlaggedOnlySession(item));
         }
 
         function setReviewAdvanceDirection(direction) {
@@ -1054,7 +1071,7 @@
 
         function isItemEligibleForReviewNavigation(item) {
             if (!item) return false;
-            return !isFlaggedOnlyMode || item.reviewStatus === 'flagged';
+            return !isFlaggedOnlyMode || isItemInFlaggedOnlySession(item);
         }
 
         function findReviewQueueIndex(direction, options = {}) {
@@ -1137,24 +1154,25 @@
                 return { current: currentQueueIndex + 1, total: totalItems };
             }
 
-            const totalFlaggedItems = getFlaggedItems().length;
-            if (totalFlaggedItems === 0) {
+            const sessionItems = getFlaggedOnlySessionItems();
+            const totalSessionItems = sessionItems.length;
+            if (totalSessionItems === 0) {
                 return { current: 0, total: 0 };
             }
 
             const currentItem = generationQueue[currentQueueIndex] || null;
-            if (!currentItem || currentItem.reviewStatus !== 'flagged') {
-                return { current: 0, total: totalFlaggedItems };
+            if (!isItemInFlaggedOnlySession(currentItem)) {
+                return { current: 0, total: totalSessionItems };
             }
 
-            const flaggedPosition = generationQueue
+            const sessionPosition = generationQueue
                 .slice(0, currentQueueIndex + 1)
-                .filter(item => item && item.reviewStatus === 'flagged')
+                .filter(item => isItemInFlaggedOnlySession(item))
                 .length;
 
             return {
-                current: flaggedPosition,
-                total: totalFlaggedItems
+                current: sessionPosition,
+                total: totalSessionItems
             };
         }
 
@@ -1795,7 +1813,8 @@
             }
 
             if (isFlaggedOnlyMode) {
-                reviewHintEl.textContent = `${reviewHintEl.textContent} Flagged Only is on.`;
+                const sessionCount = getFlaggedOnlySessionItems().length;
+                reviewHintEl.textContent = `${reviewHintEl.textContent} Flagged Only session: ${sessionCount} card${sessionCount === 1 ? '' : 's'} locked in.`;
             }
 
             const flaggedRowCount = getFlaggedRows().length;
@@ -2525,16 +2544,15 @@
 
             if (!shouldEnable) {
                 resetFlaggedOnlyMode();
-                updateReviewSummary();
-                updateActionButtons();
+                updateUIForCurrentItem({ syncPlayerToCurrent: false });
                 return;
             }
 
-            if (getFlaggedItems().length === 0) {
+            const sessionCount = startFlaggedOnlySession();
+            if (sessionCount === 0) {
                 resetFlaggedOnlyMode();
                 updateStatus('No flagged cards available for flagged-only review.', 'error');
-                updateReviewSummary();
-                updateActionButtons();
+                updateUIForCurrentItem({ syncPlayerToCurrent: false });
                 return;
             }
 
