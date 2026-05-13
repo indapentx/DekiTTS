@@ -109,15 +109,15 @@
             </div>
             <div class="mt-6">
                 <div class="text-center">
-                    <span class="block text-sm font-medium text-gray-400 mb-2">3. Choose a TTS Model</span>
-                    <p class="text-xs text-gray-500">Stick with the stable Multilingual v2 model or try the newer v3
-                        alpha.</p>
+                    <span class="block text-sm font-medium text-gray-400 mb-2">3. TTS Model</span>
+                    <p class="text-xs text-gray-500">Selected automatically: example sentences use v3, word modes use
+                        Multilingual v2.</p>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <label for="modelModeV2"
-                        class="flex items-start space-x-3 bg-gray-900/60 p-4 rounded-lg border border-gray-700 cursor-pointer">
+                        class="flex items-start space-x-3 bg-gray-900/60 p-4 rounded-lg border border-gray-700">
                         <input type="radio" name="modelMode" id="modelModeV2" value="eleven_multilingual_v2"
-                            class="mt-1.5 h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500">
+                            class="mt-1.5 h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500" disabled>
                         <div>
                             <p class="text-sm font-semibold text-gray-200">Multilingual v2 (Stable)</p>
                             <p class="text-xs text-gray-400 mb-2">Current production-ready model from ElevenLabs.</p>
@@ -127,9 +127,9 @@
                         </div>
                     </label>
                     <label for="modelModeV3"
-                        class="flex items-start space-x-3 bg-gray-900/60 p-4 rounded-lg border border-gray-700 cursor-pointer">
+                        class="flex items-start space-x-3 bg-gray-900/60 p-4 rounded-lg border border-gray-700">
                         <input type="radio" name="modelMode" id="modelModeV3" value="eleven_v3"
-                            class="mt-1.5 h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500" checked>
+                            class="mt-1.5 h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500" checked disabled>
                         <div>
                             <p class="text-sm font-semibold text-gray-200">Eleven v3 Alpha (Latest)</p>
                             <p class="text-xs text-gray-400 mb-2">Experimental alpha release with the newest upgrades.
@@ -291,7 +291,7 @@
                             </div>
                         </div>
                     </div>
-                    <p id="autoModeStatus" class="text-xs text-gray-500">Uses your selected voice, model, and generation mode, without auto-approving.</p>
+                    <p id="autoModeStatus" class="text-xs text-gray-500">Uses your selected voice, auto-selected model, and generation mode, without auto-approving.</p>
                 </div>
             </div>
 
@@ -404,6 +404,11 @@
             voiceB: 'en'
         };
         const DEFAULT_TTS_MODEL_ID = 'eleven_v3';
+        const TTS_MODEL_BY_GENERATION_MODE = {
+            sentences: 'eleven_v3',
+            words: 'eleven_multilingual_v2',
+            promptedWords: 'eleven_multilingual_v2'
+        };
         const BALANCE_REFRESH_INTERVAL_MS = 60000;
         const AUTO_GENERATE_DELAY_MS = 10;
         const APPROVE_LONG_PRESS_MS = 250;
@@ -453,6 +458,7 @@
         const flaggedTxtCount = document.getElementById('flaggedTxtCount');
         const regenerateFlaggedCount = document.getElementById('regenerateFlaggedCount');
         const generationModeRadios = document.querySelectorAll('input[name="generationMode"]');
+        const modelModeRadios = document.querySelectorAll('input[name="modelMode"]');
         const accountListEl = document.getElementById('accountList');
         const accountMessageEl = document.getElementById('accountMessage');
         const autoGenerateBtn = document.getElementById('autoGenerateBtn');
@@ -1375,8 +1381,22 @@
         }
 
         function getSelectedModelId() {
-            const selectedModelRadio = document.querySelector('input[name="modelMode"]:checked');
-            return selectedModelRadio ? selectedModelRadio.value : DEFAULT_TTS_MODEL_ID;
+            return getModelIdForGenerationMode(generationMode);
+        }
+
+        function getModelIdForGenerationMode(mode) {
+            return TTS_MODEL_BY_GENERATION_MODE[mode] || DEFAULT_TTS_MODEL_ID;
+        }
+
+        function setSelectedModelId(modelId) {
+            const nextModelId = modelId || DEFAULT_TTS_MODEL_ID;
+            modelModeRadios.forEach(radio => {
+                radio.checked = radio.value === nextModelId;
+            });
+        }
+
+        function syncTtsModelToGenerationMode(mode = generationMode) {
+            setSelectedModelId(getModelIdForGenerationMode(mode));
         }
 
         function getItemZipPath(item) {
@@ -2266,6 +2286,7 @@
             if (!value || value === generationMode) return;
 
             generationMode = value;
+            syncTtsModelToGenerationMode(generationMode);
             currentQueueIndex = 0;
             resetReviewAdvanceDirection();
             resetFlaggedOnlyMode();
@@ -2289,10 +2310,10 @@
             }
 
             const modeMessage = generationMode === 'words'
-                ? 'Switched to word pronunciation mode.'
+                ? 'Switched to word pronunciation mode. TTS model set to Multilingual v2.'
                 : (generationMode === 'sentences'
-                    ? 'Switched to example sentence mode.'
-                    : 'Switched to prompted word mode.');
+                    ? 'Switched to example sentence mode. TTS model set to Eleven v3.'
+                    : 'Switched to prompted word mode. TTS model set to Multilingual v2.');
             updateStatus(modeMessage, 'info');
         }
 
@@ -2356,7 +2377,7 @@
             isAutoGenerating = false;
             autoStopRequested = false;
             setAutoGenerateButtonState(false);
-            setAutoModeMessage('Uses your selected voice, model, and generation mode, without auto-approving.');
+            setAutoModeMessage('Uses your selected voice, auto-selected model, and generation mode, without auto-approving.');
             setLoadingState(false);
             clearAudioPlayer();
 
@@ -3079,8 +3100,9 @@
         audioPlayer.addEventListener('pause', () => scheduleShortcutFocusRelease(audioPlayer));
 
         startBalanceAutoRefresh();
+        syncTtsModelToGenerationMode();
         setAutoGenerateButtonState(false);
-        setAutoModeMessage('Uses your selected voice, model, and generation mode, without auto-approving.');
+        setAutoModeMessage('Uses your selected voice, auto-selected model, and generation mode, without auto-approving.');
         updateUIForCurrentItem();
     </script>
 </body>
