@@ -521,7 +521,9 @@
         let isAutoGenerating = false;
         let autoStopRequested = false;
         let isAutoPlaying = false;
-        let autoPlayStopRequested = false;
+        let isAutoPlayPaused = false;
+        let autoPlayCursor = -1;
+        let autoPlayInterruption = null;
         let autoPlayClipResolver = null;
         let activeAudioUrl = null;
         let loadingButtonKey = null;
@@ -1889,7 +1891,8 @@
 
         function updateReviewSummary() {
             const summary = getQueueSummary();
-            const controlsLocked = isAutoGenerating || isAutoPlaying || Boolean(loadingButtonKey);
+            // Batch/export controls stay locked while a play-through is active OR paused.
+            const controlsLocked = isAutoGenerating || isAutoPlaying || isAutoPlayPaused || Boolean(loadingButtonKey);
 
             if (summary.total === 0) {
                 reviewSummaryEl.textContent = '0 generated / 0 total';
@@ -1926,8 +1929,8 @@
             setButtonDisabled(downloadApprovedBtn, controlsLocked || summary.approved === 0);
             setButtonDisabled(downloadFlaggedTxtBtn, controlsLocked || flaggedRowCount === 0);
             setButtonDisabled(regenerateFlaggedBtn, controlsLocked || summary.flagged === 0);
-            setButtonDisabled(autoGenerateBtn, Boolean(loadingButtonKey) || isAutoPlaying || (!isAutoGenerating && summary.total === 0));
-            setButtonDisabled(playAllBtn, Boolean(loadingButtonKey) || isAutoGenerating || (!isAutoPlaying && playableCount === 0));
+            setButtonDisabled(autoGenerateBtn, Boolean(loadingButtonKey) || isAutoPlaying || isAutoPlayPaused || (!isAutoGenerating && summary.total === 0));
+            setButtonDisabled(playAllBtn, Boolean(loadingButtonKey) || isAutoGenerating || (!(isAutoPlaying || isAutoPlayPaused) && playableCount === 0));
         }
 
         function updateActionButtons() {
@@ -1981,13 +1984,19 @@
             autoGenerateBtn.classList.toggle('hover:bg-indigo-700', !isRunning);
         }
 
-        function setPlayAllButtonState(isRunning) {
+        function setPlayAllButtonState(state) {
             if (!playAllBtn) return;
-            playAllBtn.innerHTML = isRunning ? 'Stop Playing' : 'Play All<kbd>P</kbd>';
-            playAllBtn.classList.toggle('bg-pink-600', isRunning);
-            playAllBtn.classList.toggle('hover:bg-pink-700', isRunning);
-            playAllBtn.classList.toggle('bg-purple-600', !isRunning);
-            playAllBtn.classList.toggle('hover:bg-purple-700', !isRunning);
+            const isPlaying = state === 'playing';
+            const isPaused = state === 'paused';
+            playAllBtn.innerHTML = isPlaying
+                ? 'Pause<kbd>P</kbd>'
+                : (isPaused ? 'Resume<kbd>P</kbd>' : 'Play All<kbd>P</kbd>');
+            playAllBtn.classList.toggle('bg-pink-600', isPlaying);
+            playAllBtn.classList.toggle('hover:bg-pink-700', isPlaying);
+            playAllBtn.classList.toggle('bg-amber-600', isPaused);
+            playAllBtn.classList.toggle('hover:bg-amber-700', isPaused);
+            playAllBtn.classList.toggle('bg-purple-600', !isPlaying && !isPaused);
+            playAllBtn.classList.toggle('hover:bg-purple-700', !isPlaying && !isPaused);
         }
 
         function setAutoModeMessage(message) {
@@ -2300,7 +2309,7 @@
         }
 
         function requestFileImport() {
-            if (isAutoGenerating || isAutoPlaying || loadingButtonKey) {
+            if (isAutoGenerating || isAutoPlaying || isAutoPlayPaused || loadingButtonKey) {
                 updateStatus('Wait for the current operation to finish before importing a file.', 'info');
                 return false;
             }
@@ -2329,12 +2338,26 @@
             const key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
 
             if (isAutoPlaying) {
-                // While auto-playing, only the play/stop shortcut stays active so the
-                // playback sequence is not disturbed by other shortcuts.
+                // While actively playing, only pause (P) and cancel (Esc) stay active so
+                // the playback sequence is not disturbed by other shortcuts.
                 event.preventDefault();
-                if (key === 'p' && !event.repeat) {
+                if (event.repeat) return;
+                if (key === 'p') {
                     scheduleShortcutFocusRelease();
-                    void handlePlayAllAndApprove();
+                    pauseAutoPlay();
+                } else if (key === 'escape') {
+                    scheduleShortcutFocusRelease();
+                    requestCancelAutoPlay();
+                }
+                return;
+            }
+
+            if (isAutoPlayPaused && key === 'escape') {
+                // Paused: Esc cancels the whole session; every other key reviews normally.
+                event.preventDefault();
+                if (!event.repeat) {
+                    scheduleShortcutFocusRelease();
+                    requestCancelAutoPlay();
                 }
                 return;
             }
@@ -2429,6 +2452,7 @@
             currentQueueIndex = 0;
             resetReviewAdvanceDirection();
             resetFlaggedOnlyMode();
+            resetAutoPlaySession();
             clearAudioPlayer();
             setLoadingState(false);
             generationQueue = buildGenerationQueue(allRows);
@@ -2519,11 +2543,8 @@
             resetFlaggedOnlyMode();
             isAutoGenerating = false;
             autoStopRequested = false;
-            isAutoPlaying = false;
-            autoPlayStopRequested = false;
-            autoPlayClipResolver = null;
+            resetAutoPlaySession();
             setAutoGenerateButtonState(false);
-            setPlayAllButtonState(false);
             setAutoModeMessage('Uses your selected voice, current TTS model, and generation mode, without auto-approving.');
             setLoadingState(false);
             clearAudioPlayer();
@@ -2753,7 +2774,7 @@
         }
 
         function handleApproveAll() {
-            if (isAutoGenerating || isAutoPlaying || loadingButtonKey) {
+            if (isAutoGenerating || isAutoPlaying || isAutoPlayPaused || loadingButtonKey) {
                 updateStatus('Wait for the current operation to finish before approving everything.', 'info');
                 return;
             }
@@ -2791,6 +2812,32 @@
             updateStatus(`Approved ${approvedCount} clip${approvedCount === 1 ? '' : 's'} in bulk.`, 'success');
         }
 
+        function isPlayableAutoPlayItem(item) {
+            return Boolean(item && hasAudioVersions(item) && item.reviewStatus !== 'flagged');
+        }
+
+        function findPlayableIndexAtOrAfter(startIndex) {
+            for (let index = Math.max(0, startIndex); index < generationQueue.length; index++) {
+                if (isPlayableAutoPlayItem(generationQueue[index])) {
+                    return index;
+                }
+            }
+            return -1;
+        }
+
+        function getAutoPlayProgress(cursorIndex) {
+            let total = 0;
+            let position = 0;
+            generationQueue.forEach((item, index) => {
+                if (!isPlayableAutoPlayItem(item)) return;
+                total += 1;
+                if (index <= cursorIndex) {
+                    position += 1;
+                }
+            });
+            return { total, position };
+        }
+
         function waitForAutoPlayClipToFinish(blob) {
             return new Promise(resolve => {
                 if (!blob) {
@@ -2813,23 +2860,32 @@
             });
         }
 
-        function stopAutoPlay() {
-            if (!isAutoPlaying) return;
-            autoPlayStopRequested = true;
+        // Click / "P": start when idle, pause when playing, resume when paused.
+        function handlePlayAllAndApprove() {
+            if (isAutoPlaying) {
+                pauseAutoPlay();
+                return;
+            }
+            if (isAutoPlayPaused) {
+                resumeAutoPlay();
+                return;
+            }
+            startAutoPlay();
+        }
+
+        // Tear down any active/paused play-through (used when the queue is rebuilt).
+        function resetAutoPlaySession() {
             isAutoPlaying = false;
-            audioPlayer.pause();
-            setAutoModeMessage('Stopping playback...');
+            isAutoPlayPaused = false;
+            autoPlayCursor = -1;
+            autoPlayInterruption = null;
             if (autoPlayClipResolver) {
                 autoPlayClipResolver();
             }
+            setPlayAllButtonState('idle');
         }
 
-        async function handlePlayAllAndApprove() {
-            if (isAutoPlaying) {
-                stopAutoPlay();
-                return;
-            }
-
+        function startAutoPlay() {
             if (isAutoGenerating || loadingButtonKey) {
                 updateStatus('Wait for the current operation to finish before playing everything.', 'info');
                 return;
@@ -2840,47 +2896,92 @@
                 return;
             }
 
-            const playableIndexes = generationQueue
-                .map((item, index) => (item && hasAudioVersions(item) && item.reviewStatus !== 'flagged' ? index : -1))
-                .filter(index => index !== -1);
-
-            if (playableIndexes.length === 0) {
+            if (findPlayableIndexAtOrAfter(0) === -1) {
                 updateStatus('No generated clips available to play. Flagged clips are skipped.', 'info');
                 return;
             }
 
+            autoPlayCursor = 0;
             isAutoPlaying = true;
-            autoPlayStopRequested = false;
-            setPlayAllButtonState(true);
+            isAutoPlayPaused = false;
+            autoPlayInterruption = null;
+            setPlayAllButtonState('playing');
             updateReviewSummary();
             updateActionButtons();
             renderVersionHistory(getCurrentQueueItem());
-            setAutoModeMessage('Playing every generated clip. They will be approved once playback reaches the end.');
+            setAutoModeMessage('Playing every generated clip. Press P to pause and flag, Esc to cancel.');
+            void runAutoPlayLoop();
+        }
 
-            for (let position = 0; position < playableIndexes.length && isAutoPlaying && !autoPlayStopRequested; position++) {
-                const targetIndex = playableIndexes[position];
-                currentQueueIndex = targetIndex;
-                updateUIForCurrentItem({ syncPlayerToCurrent: false });
+        function resumeAutoPlay() {
+            if (!isAutoPlayPaused) return;
+            isAutoPlayPaused = false;
+            isAutoPlaying = true;
+            autoPlayInterruption = null;
+            setPlayAllButtonState('playing');
+            updateReviewSummary();
+            updateActionButtons();
+            renderVersionHistory(getCurrentQueueItem());
+            updateStatus('Resuming playback.', 'info');
+            void runAutoPlayLoop();
+        }
 
-                const item = generationQueue[targetIndex];
-                const version = getCurrentAudioVersion(item);
-                setAutoModeMessage(`Playing clip ${position + 1} of ${playableIndexes.length}: ${getItemDisplayWord(item)}.`);
-                updateStatus(`Playing ${getItemDisplayWord(item)} (${position + 1}/${playableIndexes.length}).`, 'info');
-
-                await waitForAutoPlayClipToFinish(version ? version.blob : null);
-            }
-
-            const stopped = autoPlayStopRequested || !isAutoPlaying;
+        // Pause keeps the session alive so the user can flag/review, then resume.
+        function pauseAutoPlay() {
+            if (!isAutoPlaying) return;
+            autoPlayInterruption = 'pause';
             isAutoPlaying = false;
-            autoPlayStopRequested = false;
-            setPlayAllButtonState(false);
+            audioPlayer.pause();
+            if (autoPlayClipResolver) {
+                autoPlayClipResolver();
+            }
+        }
 
-            if (stopped) {
-                setAutoModeMessage('Playback stopped early. Nothing was approved.');
-                updateStatus('Playback stopped. Nothing was approved.', 'info');
-                updateUIForCurrentItem({ syncPlayerToCurrent: false });
+        // Esc fully cancels the session (whether playing or paused) without approving.
+        function requestCancelAutoPlay() {
+            if (isAutoPlaying) {
+                autoPlayInterruption = 'cancel';
+                isAutoPlaying = false;
+                audioPlayer.pause();
+                if (autoPlayClipResolver) {
+                    autoPlayClipResolver();
+                }
                 return;
             }
+            if (isAutoPlayPaused) {
+                cancelAutoPlaySession();
+            }
+        }
+
+        function enterAutoPlayPausedState() {
+            isAutoPlaying = false;
+            isAutoPlayPaused = true;
+            autoPlayInterruption = null;
+            setPlayAllButtonState('paused');
+            const { total, position } = getAutoPlayProgress(autoPlayCursor);
+            setAutoModeMessage(`Paused at clip ${position} of ${total}. Flag or review as needed, then press P (or Resume) to continue. Esc cancels.`);
+            updateStatus('Playback paused. Flag or review, then resume.', 'info');
+            updateUIForCurrentItem({ syncPlayerToCurrent: false });
+        }
+
+        function cancelAutoPlaySession() {
+            isAutoPlaying = false;
+            isAutoPlayPaused = false;
+            autoPlayCursor = -1;
+            autoPlayInterruption = null;
+            audioPlayer.pause();
+            setPlayAllButtonState('idle');
+            setAutoModeMessage('Playback canceled. Nothing was approved.');
+            updateStatus('Playback canceled. Nothing was approved.', 'info');
+            updateUIForCurrentItem({ syncPlayerToCurrent: false });
+        }
+
+        function finishAutoPlaySession() {
+            isAutoPlaying = false;
+            isAutoPlayPaused = false;
+            autoPlayCursor = -1;
+            autoPlayInterruption = null;
+            setPlayAllButtonState('idle');
 
             const approvableItems = getApprovableItems();
             approvableItems.forEach(item => {
@@ -2897,9 +2998,51 @@
             const approvedCount = approvableItems.length;
             setAutoModeMessage('Finished playing every clip. All played clips have been approved.');
             updateStatus(
-                `Played ${playableIndexes.length} clip${playableIndexes.length === 1 ? '' : 's'} and approved ${approvedCount}.`,
+                `Finished playback and approved ${approvedCount} clip${approvedCount === 1 ? '' : 's'}.`,
                 'success'
             );
+        }
+
+        async function runAutoPlayLoop() {
+            while (isAutoPlaying) {
+                const targetIndex = findPlayableIndexAtOrAfter(autoPlayCursor < 0 ? 0 : autoPlayCursor);
+                if (targetIndex === -1) {
+                    finishAutoPlaySession();
+                    return;
+                }
+
+                autoPlayCursor = targetIndex;
+                currentQueueIndex = targetIndex;
+                updateUIForCurrentItem({ syncPlayerToCurrent: false });
+
+                const item = generationQueue[targetIndex];
+                const version = getCurrentAudioVersion(item);
+                const { total, position } = getAutoPlayProgress(targetIndex);
+                setAutoModeMessage(`Playing clip ${position} of ${total}: ${getItemDisplayWord(item)}. P pauses, Esc cancels.`);
+                updateStatus(`Playing ${getItemDisplayWord(item)} (${position}/${total}).`, 'info');
+
+                autoPlayInterruption = null;
+                await waitForAutoPlayClipToFinish(version ? version.blob : null);
+
+                if (autoPlayInterruption === 'pause') {
+                    enterAutoPlayPausedState();
+                    return;
+                }
+                if (autoPlayInterruption === 'cancel') {
+                    cancelAutoPlaySession();
+                    return;
+                }
+
+                // Clip finished on its own; advance past it for the next iteration.
+                autoPlayCursor = targetIndex + 1;
+            }
+
+            // Safety net: the loop exited because isAutoPlaying flipped outside the await.
+            if (autoPlayInterruption === 'pause') {
+                enterAutoPlayPausedState();
+            } else if (autoPlayInterruption === 'cancel') {
+                cancelAutoPlaySession();
+            }
         }
 
         function toggleFlagForCurrentItem(options = {}) {
