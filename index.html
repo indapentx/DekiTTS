@@ -287,6 +287,17 @@
                                     class="inline-flex items-center justify-center bg-indigo-600 text-white text-xs font-semibold py-1.5 px-3 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-[1.02]">
                                     Generate All
                                 </button>
+                                <button id="approveAllBtn"
+                                    class="inline-flex items-center justify-center bg-green-600 text-white text-xs font-semibold py-1.5 px-3 rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-transform transform hover:scale-[1.02] btn-disabled"
+                                    disabled>
+                                    Approve All (<span id="approveAllCount">0</span>)
+                                </button>
+                                <button id="playAllBtn"
+                                    title="Play every generated clip in order, then approve them all"
+                                    class="inline-flex items-center justify-center bg-purple-600 text-white text-xs font-semibold py-1.5 px-3 rounded-lg shadow-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-transform transform hover:scale-[1.02] btn-disabled"
+                                    disabled>
+                                    Play All<kbd>P</kbd>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -316,6 +327,26 @@
             </div>
 
             <!-- Download Section -->
+            <div class="flex flex-col gap-2 rounded-xl border border-gray-700 bg-gray-900/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-sm font-semibold text-gray-200">Download Layout</p>
+                    <p id="downloadLayoutHint" class="text-xs text-gray-500">Keep each source file in its own folder inside the ZIP.</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <label for="downloadLayoutSource"
+                        class="inline-flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900/80 px-3 py-1.5 text-xs font-semibold text-gray-200 cursor-pointer">
+                        <input type="radio" name="downloadLayout" id="downloadLayoutSource" value="source"
+                            class="h-3.5 w-3.5 text-indigo-500 border-gray-600 focus:ring-indigo-500" checked>
+                        <span>By source folder</span>
+                    </label>
+                    <label for="downloadLayoutSingle"
+                        class="inline-flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900/80 px-3 py-1.5 text-xs font-semibold text-gray-200 cursor-pointer">
+                        <input type="radio" name="downloadLayout" id="downloadLayoutSingle" value="single"
+                            class="h-3.5 w-3.5 text-indigo-500 border-gray-600 focus:ring-indigo-500">
+                        <span>All in one folder</span>
+                    </label>
+                </div>
+            </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 pt-2">
                 <button id="downloadZipBtn"
                     class="w-full bg-gray-600 text-white text-sm font-semibold leading-snug py-2.5 px-4 rounded-lg shadow-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-transform transform hover:scale-[1.02] btn-disabled"
@@ -461,6 +492,11 @@
         const accountListEl = document.getElementById('accountList');
         const accountMessageEl = document.getElementById('accountMessage');
         const autoGenerateBtn = document.getElementById('autoGenerateBtn');
+        const approveAllBtn = document.getElementById('approveAllBtn');
+        const approveAllCount = document.getElementById('approveAllCount');
+        const playAllBtn = document.getElementById('playAllBtn');
+        const downloadLayoutRadios = document.querySelectorAll('input[name="downloadLayout"]');
+        const downloadLayoutHintEl = document.getElementById('downloadLayoutHint');
         const autoModeStatusEl = document.getElementById('autoModeStatus');
         const creditTotalEl = document.getElementById('creditTotal');
         const creditBreakdownEl = document.getElementById('creditBreakdown');
@@ -478,11 +514,15 @@
         let flaggedOnlySessionItemIds = new Set();
         let lastGeneratedBlob = null;
         let generationMode = 'sentences';
+        let downloadLayout = 'source';
         let balanceRefreshTimerId = null;
         const accountElements = new Map();
         let selectedAccountId = null;
         let isAutoGenerating = false;
         let autoStopRequested = false;
+        let isAutoPlaying = false;
+        let autoPlayStopRequested = false;
+        let autoPlayClipResolver = null;
         let activeAudioUrl = null;
         let loadingButtonKey = null;
         let copyFeedbackTimerId = null;
@@ -520,6 +560,11 @@
         downloadFlaggedTxtBtn.addEventListener('click', downloadFlaggedTxt);
         regenerateFlaggedBtn.addEventListener('click', handleRegenerateFlagged);
         autoGenerateBtn.addEventListener('click', handleAutoGenerateAll);
+        approveAllBtn.addEventListener('click', handleApproveAll);
+        playAllBtn.addEventListener('click', handlePlayAllAndApprove);
+        downloadLayoutRadios.forEach(radio => {
+            radio.addEventListener('change', handleDownloadLayoutChange);
+        });
         versionHistoryListEl.addEventListener('click', handleVersionHistoryClick);
         window.addEventListener('keydown', handleKeyPress, true);
         window.addEventListener('keyup', handleKeyRelease, true);
@@ -1415,6 +1460,9 @@
 
         function getItemZipPath(item) {
             if (!item) return '';
+            if (downloadLayout === 'single') {
+                return item.filename;
+            }
             const targetFolder = isEnglishModeSelected() && item.sourceFolder ? item.sourceFolder : null;
             return targetFolder ? `${targetFolder}/${item.filename}` : item.filename;
         }
@@ -1462,6 +1510,8 @@
                 flagBtn,
                 nextBtn,
                 autoGenerateBtn,
+                approveAllBtn,
+                playAllBtn,
                 downloadZipBtn,
                 downloadApprovedBtn,
                 downloadFlaggedTxtBtn,
@@ -1610,6 +1660,15 @@
             return generationQueue.filter(item => item && item.reviewStatus === 'approved' && hasApprovedAudio(item));
         }
 
+        function getApprovableItems() {
+            return generationQueue.filter(item => {
+                if (!item || item.reviewStatus === 'flagged') return false;
+                const currentVersion = getCurrentAudioVersion(item);
+                if (!currentVersion) return false;
+                return item.approvedVersionId !== currentVersion.id;
+            });
+        }
+
         function getFlaggedRows() {
             const seenRowIndexes = new Set();
             const flaggedRows = [];
@@ -1735,7 +1794,7 @@
             const approvedVersion = getApprovedAudioVersion(item);
             const browsedVersion = getBrowsedAudioVersion(item);
             const approvalHistory = getApprovalHistory(item);
-            const controlsLocked = isAutoGenerating || Boolean(loadingButtonKey);
+            const controlsLocked = isAutoGenerating || isAutoPlaying || Boolean(loadingButtonKey);
             const takeCount = versions.length;
             const approvalCount = approvalHistory.length;
             const latestApprovalEntry = approvalHistory[approvalHistory.length - 1] || null;
@@ -1830,7 +1889,7 @@
 
         function updateReviewSummary() {
             const summary = getQueueSummary();
-            const controlsLocked = isAutoGenerating || Boolean(loadingButtonKey);
+            const controlsLocked = isAutoGenerating || isAutoPlaying || Boolean(loadingButtonKey);
 
             if (summary.total === 0) {
                 reviewSummaryEl.textContent = '0 generated / 0 total';
@@ -1852,23 +1911,30 @@
             }
 
             const flaggedRowCount = getFlaggedRows().length;
+            const approvableCount = getApprovableItems().length;
+            const playableCount = generationQueue.filter(
+                item => item && hasAudioVersions(item) && item.reviewStatus !== 'flagged'
+            ).length;
             zipCount.textContent = summary.ready;
             approvedZipCount.textContent = summary.approved;
             flaggedTxtCount.textContent = flaggedRowCount;
             regenerateFlaggedCount.textContent = summary.flagged;
+            approveAllCount.textContent = approvableCount;
 
+            setButtonDisabled(approveAllBtn, controlsLocked || approvableCount === 0);
             setButtonDisabled(downloadZipBtn, controlsLocked || summary.ready === 0);
             setButtonDisabled(downloadApprovedBtn, controlsLocked || summary.approved === 0);
             setButtonDisabled(downloadFlaggedTxtBtn, controlsLocked || flaggedRowCount === 0);
             setButtonDisabled(regenerateFlaggedBtn, controlsLocked || summary.flagged === 0);
-            setButtonDisabled(autoGenerateBtn, Boolean(loadingButtonKey) || (!isAutoGenerating && summary.total === 0));
+            setButtonDisabled(autoGenerateBtn, Boolean(loadingButtonKey) || isAutoPlaying || (!isAutoGenerating && summary.total === 0));
+            setButtonDisabled(playAllBtn, Boolean(loadingButtonKey) || isAutoGenerating || (!isAutoPlaying && playableCount === 0));
         }
 
         function updateActionButtons() {
             const currentItem = getCurrentQueueItem();
             const hasItem = Boolean(currentItem);
             const hasAudio = hasAudioVersions(currentItem);
-            const isLocked = isAutoGenerating || Boolean(loadingButtonKey);
+            const isLocked = isAutoGenerating || isAutoPlaying || Boolean(loadingButtonKey);
 
             previousBtn.innerHTML = BUTTON_LABELS.previous;
             generateBtn.innerHTML = loadingButtonKey === 'generate' ? SPINNER_MARKUP : BUTTON_LABELS.generate;
@@ -1913,6 +1979,15 @@
             autoGenerateBtn.classList.toggle('hover:bg-pink-700', isRunning);
             autoGenerateBtn.classList.toggle('bg-indigo-600', !isRunning);
             autoGenerateBtn.classList.toggle('hover:bg-indigo-700', !isRunning);
+        }
+
+        function setPlayAllButtonState(isRunning) {
+            if (!playAllBtn) return;
+            playAllBtn.innerHTML = isRunning ? 'Stop Playing' : 'Play All<kbd>P</kbd>';
+            playAllBtn.classList.toggle('bg-pink-600', isRunning);
+            playAllBtn.classList.toggle('hover:bg-pink-700', isRunning);
+            playAllBtn.classList.toggle('bg-purple-600', !isRunning);
+            playAllBtn.classList.toggle('hover:bg-purple-700', !isRunning);
         }
 
         function setAutoModeMessage(message) {
@@ -2019,6 +2094,16 @@
             return processGeneration(true);
         }
 
+        function applyApprovalToItem(item, version) {
+            if (!item || !version) return null;
+            const approvalEntry = item.approvedVersionId !== version.id
+                ? addApprovalHistoryEntry(item, version)
+                : null;
+            item.reviewStatus = 'approved';
+            item.approvedVersionId = version.id;
+            return approvalEntry;
+        }
+
         function approveVersionForItem(item, versionId, options = {}) {
             const {
                 silent = false,
@@ -2034,12 +2119,7 @@
                 return false;
             }
 
-            const approvalEntry = item.approvedVersionId !== version.id
-                ? addApprovalHistoryEntry(item, version)
-                : null;
-
-            item.reviewStatus = 'approved';
-            item.approvedVersionId = version.id;
+            const approvalEntry = applyApprovalToItem(item, version);
             lastGeneratedBlob = version.blob;
 
             if (!silent) {
@@ -2174,6 +2254,11 @@
                     scheduleShortcutFocusRelease();
                     void copyCurrentRowFilenameShortcut();
                     return true;
+                case 'p':
+                    if (playAllBtn.disabled) return false;
+                    scheduleShortcutFocusRelease();
+                    void handlePlayAllAndApprove();
+                    return true;
                 case 'm':
                 case 'arrowright':
                     if (nextBtn.disabled) return false;
@@ -2215,7 +2300,7 @@
         }
 
         function requestFileImport() {
-            if (isAutoGenerating || loadingButtonKey) {
+            if (isAutoGenerating || isAutoPlaying || loadingButtonKey) {
                 updateStatus('Wait for the current operation to finish before importing a file.', 'info');
                 return false;
             }
@@ -2242,6 +2327,18 @@
             }
 
             const key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
+
+            if (isAutoPlaying) {
+                // While auto-playing, only the play/stop shortcut stays active so the
+                // playback sequence is not disturbed by other shortcuts.
+                event.preventDefault();
+                if (key === 'p' && !event.repeat) {
+                    scheduleShortcutFocusRelease();
+                    void handlePlayAllAndApprove();
+                }
+                return;
+            }
+
             if (key === 'a') {
                 event.preventDefault();
 
@@ -2293,6 +2390,25 @@
             if (key && heldShortcutKey === key) {
                 stopHeldShortcut();
             }
+        }
+
+        function handleDownloadLayoutChange(event) {
+            if (!event.target || !event.target.checked) return;
+            downloadLayout = event.target.value === 'single' ? 'single' : 'source';
+
+            if (downloadLayoutHintEl) {
+                downloadLayoutHintEl.textContent = downloadLayout === 'single'
+                    ? 'Put every clip together in the ZIP root, no source subfolders.'
+                    : 'Keep each source file in its own folder inside the ZIP.';
+            }
+
+            updateCurrentItemStatus(getCurrentQueueItem());
+            updateStatus(
+                downloadLayout === 'single'
+                    ? 'Downloads will place every clip in one folder.'
+                    : 'Downloads will keep each source file in its own folder.',
+                'info'
+            );
         }
 
         function handleModelModeChange(event) {
@@ -2403,7 +2519,11 @@
             resetFlaggedOnlyMode();
             isAutoGenerating = false;
             autoStopRequested = false;
+            isAutoPlaying = false;
+            autoPlayStopRequested = false;
+            autoPlayClipResolver = null;
             setAutoGenerateButtonState(false);
+            setPlayAllButtonState(false);
             setAutoModeMessage('Uses your selected voice, current TTS model, and generation mode, without auto-approving.');
             setLoadingState(false);
             clearAudioPlayer();
@@ -2630,6 +2750,156 @@
                 advance,
                 syncPlayerToCurrent: true
             });
+        }
+
+        function handleApproveAll() {
+            if (isAutoGenerating || isAutoPlaying || loadingButtonKey) {
+                updateStatus('Wait for the current operation to finish before approving everything.', 'info');
+                return;
+            }
+
+            if (generationQueue.length === 0) {
+                updateStatus('Load a file before approving clips.', 'error');
+                return;
+            }
+
+            const approvableItems = getApprovableItems();
+            if (approvableItems.length === 0) {
+                const hasGeneratedUnflagged = generationQueue.some(
+                    item => item && hasAudioVersions(item) && item.reviewStatus !== 'flagged'
+                );
+                updateStatus(
+                    hasGeneratedUnflagged
+                        ? 'All generated clips are already approved.'
+                        : 'No generated clips available to approve. Flagged clips are skipped.',
+                    'info'
+                );
+                return;
+            }
+
+            approvableItems.forEach(item => {
+                const currentVersion = getCurrentAudioVersion(item);
+                if (currentVersion) {
+                    applyApprovalToItem(item, currentVersion);
+                }
+            });
+
+            syncCurrentItemToReviewFilter({ preferredDirection: reviewAdvanceDirection });
+            updateUIForCurrentItem({ syncPlayerToCurrent: false });
+
+            const approvedCount = approvableItems.length;
+            updateStatus(`Approved ${approvedCount} clip${approvedCount === 1 ? '' : 's'} in bulk.`, 'success');
+        }
+
+        function waitForAutoPlayClipToFinish(blob) {
+            return new Promise(resolve => {
+                if (!blob) {
+                    resolve();
+                    return;
+                }
+
+                const finish = () => {
+                    audioPlayer.removeEventListener('ended', finish);
+                    audioPlayer.removeEventListener('error', finish);
+                    autoPlayClipResolver = null;
+                    resolve();
+                };
+
+                autoPlayClipResolver = finish;
+                audioPlayer.addEventListener('ended', finish);
+                audioPlayer.addEventListener('error', finish);
+                setAudioPlayerBlob(blob, { autoplay: false, showPlayer: true });
+                audioPlayer.play().catch(() => finish());
+            });
+        }
+
+        function stopAutoPlay() {
+            if (!isAutoPlaying) return;
+            autoPlayStopRequested = true;
+            isAutoPlaying = false;
+            audioPlayer.pause();
+            setAutoModeMessage('Stopping playback...');
+            if (autoPlayClipResolver) {
+                autoPlayClipResolver();
+            }
+        }
+
+        async function handlePlayAllAndApprove() {
+            if (isAutoPlaying) {
+                stopAutoPlay();
+                return;
+            }
+
+            if (isAutoGenerating || loadingButtonKey) {
+                updateStatus('Wait for the current operation to finish before playing everything.', 'info');
+                return;
+            }
+
+            if (generationQueue.length === 0) {
+                updateStatus('Load and generate clips before playing them all.', 'error');
+                return;
+            }
+
+            const playableIndexes = generationQueue
+                .map((item, index) => (item && hasAudioVersions(item) && item.reviewStatus !== 'flagged' ? index : -1))
+                .filter(index => index !== -1);
+
+            if (playableIndexes.length === 0) {
+                updateStatus('No generated clips available to play. Flagged clips are skipped.', 'info');
+                return;
+            }
+
+            isAutoPlaying = true;
+            autoPlayStopRequested = false;
+            setPlayAllButtonState(true);
+            updateReviewSummary();
+            updateActionButtons();
+            renderVersionHistory(getCurrentQueueItem());
+            setAutoModeMessage('Playing every generated clip. They will be approved once playback reaches the end.');
+
+            for (let position = 0; position < playableIndexes.length && isAutoPlaying && !autoPlayStopRequested; position++) {
+                const targetIndex = playableIndexes[position];
+                currentQueueIndex = targetIndex;
+                updateUIForCurrentItem({ syncPlayerToCurrent: false });
+
+                const item = generationQueue[targetIndex];
+                const version = getCurrentAudioVersion(item);
+                setAutoModeMessage(`Playing clip ${position + 1} of ${playableIndexes.length}: ${getItemDisplayWord(item)}.`);
+                updateStatus(`Playing ${getItemDisplayWord(item)} (${position + 1}/${playableIndexes.length}).`, 'info');
+
+                await waitForAutoPlayClipToFinish(version ? version.blob : null);
+            }
+
+            const stopped = autoPlayStopRequested || !isAutoPlaying;
+            isAutoPlaying = false;
+            autoPlayStopRequested = false;
+            setPlayAllButtonState(false);
+
+            if (stopped) {
+                setAutoModeMessage('Playback stopped early. Nothing was approved.');
+                updateStatus('Playback stopped. Nothing was approved.', 'info');
+                updateUIForCurrentItem({ syncPlayerToCurrent: false });
+                return;
+            }
+
+            const approvableItems = getApprovableItems();
+            approvableItems.forEach(item => {
+                const version = getCurrentAudioVersion(item);
+                if (version) {
+                    applyApprovalToItem(item, version);
+                }
+            });
+
+            currentQueueIndex = 0;
+            resetReviewAdvanceDirection();
+            updateUIForCurrentItem({ syncPlayerToCurrent: false });
+
+            const approvedCount = approvableItems.length;
+            setAutoModeMessage('Finished playing every clip. All played clips have been approved.');
+            updateStatus(
+                `Played ${playableIndexes.length} clip${playableIndexes.length === 1 ? '' : 's'} and approved ${approvedCount}.`,
+                'success'
+            );
         }
 
         function toggleFlagForCurrentItem(options = {}) {
