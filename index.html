@@ -237,7 +237,17 @@
                     >-</h2>
                 </div>
                 <div>
-                    <p id="currentTextLabel" class="text-sm text-gray-400">Sentence to Generate</p>
+                    <div class="flex items-center justify-between gap-2">
+                        <p id="currentTextLabel" class="text-sm text-gray-400">Sentence to Generate</p>
+                        <button
+                            id="editTextBtn"
+                            type="button"
+                            class="inline-flex items-center gap-1 rounded-lg border border-gray-700 bg-gray-800 px-2 py-1 text-xs font-semibold text-gray-300 hover:text-white hover:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition btn-disabled"
+                            title="Edit this text to fix typos before or after generating"
+                        >
+                            ✏️ Edit
+                        </button>
+                    </div>
                     <p
                         id="currentText"
                         class="rounded px-2 py-1 text-lg font-medium text-gray-100 transition hover:text-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 cursor-pointer"
@@ -245,6 +255,30 @@
                         tabindex="0"
                         title="Tap to copy"
                     >-</p>
+                    <div id="textEditor" class="hidden mt-1">
+                        <textarea
+                            id="textEditorInput"
+                            rows="2"
+                            class="w-full rounded-lg border border-indigo-500/50 bg-gray-900 px-3 py-2 text-lg font-medium text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        ></textarea>
+                        <div class="mt-2 flex items-center justify-end gap-2">
+                            <button
+                                id="cancelTextEditBtn"
+                                type="button"
+                                class="inline-flex items-center justify-center rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-gray-500 transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                id="saveTextEditBtn"
+                                type="button"
+                                class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition"
+                            >
+                                Save
+                            </button>
+                        </div>
+                        <p class="mt-1 text-xs text-gray-500">Press Cmd/Ctrl+Enter to save, Esc to cancel.</p>
+                    </div>
                 </div>
                 <p id="currentItemStatus" class="text-sm text-gray-500">Not generated yet.</p>
                 <p
@@ -465,6 +499,11 @@
         const currentWordEl = document.getElementById('currentWord');
         const currentTextEl = document.getElementById('currentText');
         const currentTextLabelEl = document.getElementById('currentTextLabel');
+        const editTextBtn = document.getElementById('editTextBtn');
+        const textEditorEl = document.getElementById('textEditor');
+        const textEditorInputEl = document.getElementById('textEditorInput');
+        const saveTextEditBtn = document.getElementById('saveTextEditBtn');
+        const cancelTextEditBtn = document.getElementById('cancelTextEditBtn');
         const currentItemStatusEl = document.getElementById('currentItemStatus');
         const copyFeedbackEl = document.getElementById('copyFeedback');
         const audioPlayer = document.getElementById('audioPlayer');
@@ -527,6 +566,7 @@
         let autoPlayClipResolver = null;
         let activeAudioUrl = null;
         let loadingButtonKey = null;
+        let isEditingText = false;
         let copyFeedbackTimerId = null;
         let approveLongPressTimerId = null;
         let isTtsModelAutoSelectionEnabled = true;
@@ -556,6 +596,10 @@
         approveBtn.addEventListener('click', () => handleApprove());
         flagBtn.addEventListener('click', () => toggleFlagForCurrentItem());
         nextBtn.addEventListener('click', moveToNextItem);
+        editTextBtn.addEventListener('click', enterTextEditMode);
+        saveTextEditBtn.addEventListener('click', () => exitTextEditMode(true));
+        cancelTextEditBtn.addEventListener('click', () => exitTextEditMode(false));
+        textEditorInputEl.addEventListener('keydown', handleTextEditorKeydown);
         flaggedOnlyToggle.addEventListener('change', handleFlaggedOnlyToggle);
         downloadZipBtn.addEventListener('click', downloadReadyZip);
         downloadApprovedBtn.addEventListener('click', downloadApprovedZip);
@@ -1955,6 +1999,7 @@
             setButtonDisabled(approveBtn, isLocked || !hasAudio);
             setButtonDisabled(flagBtn, isLocked || !hasItem);
             setButtonDisabled(nextBtn, isLocked || !hasItem || !hasNextReviewItem);
+            setButtonDisabled(editTextBtn, isLocked || !hasItem);
         }
 
         function setLoadingState(isLoading, buttonKey = 'generate') {
@@ -2006,6 +2051,7 @@
         function updateUIForCurrentItem(options = {}) {
             const { autoplayAudio = false, syncPlayerToCurrent = true } = options;
             hideCopyFeedback();
+            if (isEditingText) closeTextEditor();
 
             if (generationQueue.length === 0) {
                 currentTextLabelEl.textContent = getModeReviewLabel(generationMode);
@@ -3421,6 +3467,99 @@
                 copyFeedbackEl.textContent = '';
                 copyFeedbackTimerId = null;
             }, 2600);
+        }
+
+        function recomputeItemFilename(item) {
+            if (!item) return '';
+            const rawBaseName = (item.word || item.rowWord || `entry ${item.rowIndex + 1}`).trim()
+                || item.rowWord
+                || `entry ${item.rowIndex + 1}`;
+            const sanitizedBase = sanitizeFilenamePart(rawBaseName);
+            const suffix = item.contentType === 'sentence' && item.sentenceTotal > 1 && item.sentencePosition > 1
+                ? String(item.sentencePosition)
+                : '';
+            const filenameBase = isWordContentType(item.contentType)
+                ? sanitizedBase
+                : `s_${sanitizedBase}${suffix}`;
+            return `${filenameBase}.mp3`;
+        }
+
+        function refreshCurrentItemTextUI(item) {
+            if (!item) return;
+            currentWordEl.textContent = getItemDisplayWord(item);
+            currentTextEl.textContent = getItemReviewText(item);
+            setCopyPayload(currentWordEl, item.word || getItemDisplayWord(item), 'Current word');
+            setCopyPayload(currentTextEl, getItemReviewText(item) === '-' ? '' : getItemReviewText(item), currentTextLabelEl.textContent);
+            updateCurrentItemStatus(item);
+            updateCreditEstimate();
+        }
+
+        function enterTextEditMode() {
+            if (editTextBtn.disabled || isEditingText) return;
+            const item = getCurrentQueueItem();
+            if (!item) return;
+
+            isEditingText = true;
+            textEditorInputEl.value = item.text || '';
+            currentTextEl.classList.add('hidden');
+            editTextBtn.classList.add('hidden');
+            textEditorEl.classList.remove('hidden');
+            textEditorInputEl.focus();
+            const caret = textEditorInputEl.value.length;
+            textEditorInputEl.setSelectionRange(caret, caret);
+        }
+
+        function closeTextEditor() {
+            isEditingText = false;
+            textEditorEl.classList.add('hidden');
+            currentTextEl.classList.remove('hidden');
+            editTextBtn.classList.remove('hidden');
+        }
+
+        function exitTextEditMode(save) {
+            if (!isEditingText) return;
+
+            if (!save) {
+                closeTextEditor();
+                return;
+            }
+
+            const item = getCurrentQueueItem();
+            if (!item) {
+                closeTextEditor();
+                return;
+            }
+
+            const newText = textEditorInputEl.value.trim();
+            if (!newText) {
+                updateStatus("Text can't be empty.", 'error');
+                textEditorInputEl.focus();
+                return;
+            }
+
+            if (newText !== (item.text || '')) {
+                item.text = newText;
+                if (isWordContentType(item.contentType)) {
+                    item.word = newText;
+                    item.filename = recomputeItemFilename(item);
+                }
+                refreshCurrentItemTextUI(item);
+                updateStatus('Text updated.', 'success');
+            }
+
+            closeTextEditor();
+        }
+
+        function handleTextEditorKeydown(event) {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                exitTextEditMode(false);
+                return;
+            }
+            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                exitTextEditMode(true);
+            }
         }
 
         function setCopyPayload(element, text, label) {
