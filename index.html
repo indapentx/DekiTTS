@@ -546,6 +546,9 @@
         let allRows = [];
         let generationQueue = [];
         let currentQueueIndex = 0;
+        // Per-mode snapshots of { queue, index } so switching modes preserves takes,
+        // review status, and position instead of rebuilding from scratch.
+        let queuesByMode = {};
         let reviewAdvanceDirection = 1;
         let consecutivePreviousMoves = 0;
         const REVERSE_REVIEW_TRIGGER_STEPS = 2;
@@ -710,8 +713,30 @@
             return Array.isArray(item.sentences) ? item.sentences : [];
         }
 
+        const LAST_ACCOUNT_STORAGE_KEY = 'dekitts:lastAccountId';
+
+        function loadLastAccountId() {
+            try {
+                return localStorage.getItem(LAST_ACCOUNT_STORAGE_KEY);
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function saveLastAccountId(accountId) {
+            try {
+                if (accountId) {
+                    localStorage.setItem(LAST_ACCOUNT_STORAGE_KEY, accountId);
+                } else {
+                    localStorage.removeItem(LAST_ACCOUNT_STORAGE_KEY);
+                }
+            } catch (error) {
+                /* localStorage unavailable (private mode, disabled) — selection just won't persist */
+            }
+        }
+
         function initializeAccountSelector() {
-            const previouslySelected = selectedAccountId;
+            const previouslySelected = selectedAccountId || loadLastAccountId();
             accountElements.clear();
             if (accountListEl) {
                 accountListEl.innerHTML = '';
@@ -801,6 +826,7 @@
                 radio.addEventListener('change', () => {
                     if (radio.checked) {
                         setSelectedAccount(account.id);
+                        saveLastAccountId(account.id);
                     }
                 });
             });
@@ -2493,15 +2519,27 @@
             const { value } = event.target;
             if (!value || value === generationMode) return;
 
+            // Stash the queue/position of the mode we're leaving so returning to it
+            // restores its takes and progress instead of starting over.
+            queuesByMode[generationMode] = { queue: generationQueue, index: currentQueueIndex };
+
             generationMode = value;
             syncTtsModelToGenerationMode(generationMode);
-            currentQueueIndex = 0;
             resetReviewAdvanceDirection();
             resetFlaggedOnlyMode();
             resetAutoPlaySession();
             clearAudioPlayer();
             setLoadingState(false);
-            generationQueue = buildGenerationQueue(allRows);
+
+            const cachedQueue = queuesByMode[generationMode];
+            if (cachedQueue) {
+                generationQueue = cachedQueue.queue;
+                currentQueueIndex = cachedQueue.index;
+            } else {
+                generationQueue = buildGenerationQueue(allRows);
+                currentQueueIndex = 0;
+            }
+            clampCurrentQueueIndex();
             updateUIForCurrentItem();
 
             if (!Array.isArray(allRows) || allRows.length === 0) {
@@ -2583,6 +2621,7 @@
             }
 
             allRows = combinedRows;
+            queuesByMode = {};
             generationQueue = buildGenerationQueue(allRows);
             currentQueueIndex = 0;
             resetReviewAdvanceDirection();
