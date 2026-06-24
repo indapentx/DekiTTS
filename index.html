@@ -7,6 +7,40 @@
     <title>Deki TTS</title>
     <link rel="icon" href="shortcut.png" />
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // All-black (monochrome) theme: override the Tailwind palette so every existing
+        // utility renders in black tones. Accent families (indigo/purple/amber/blue/yellow)
+        // go grayscale; only red (errors) and green (success/approved) keep a faint tint.
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        gray: {
+                            50: '#f7f7f7', 100: '#ececec', 200: '#d4d4d4', 300: '#b3b3b3',
+                            400: '#8a8a8a', 500: '#5c5c5c', 600: '#333333', 700: '#262626',
+                            800: '#161616', 900: '#0a0a0a', 950: '#000000'
+                        },
+                        indigo: {
+                            100: '#ececec', 300: '#e5e5e5', 400: '#d0d0d0',
+                            500: '#6e6e6e', 600: '#2b2b2b', 700: '#3d3d3d'
+                        },
+                        purple: { 500: '#6e6e6e', 600: '#2b2b2b', 700: '#3d3d3d' },
+                        amber: {
+                            100: '#d8d8d8', 300: '#cfcfcf', 400: '#bcbcbc',
+                            500: '#5c5c5c', 600: '#2b2b2b', 700: '#3d3d3d'
+                        },
+                        blue: { 500: '#b8b8b8', 600: '#2b2b2b', 700: '#3d3d3d' },
+                        yellow: { 400: '#c8c8c8', 500: '#bcbcbc', 600: '#2b2b2b' },
+                        red: { 400: '#cf6b6b', 500: '#c25a5a', 600: '#a84a4a', 700: '#8f3f3f' },
+                        green: {
+                            100: '#cfe6d6', 300: '#8fce9f', 400: '#7ab98a',
+                            500: '#5fa06f', 600: '#2b2b2b', 700: '#3d3d3d'
+                        }
+                    }
+                }
+            }
+        };
+    </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -21,8 +55,8 @@
         }
 
         .spinner {
-            border-top-color: #4f46e5;
-            /* indigo-600 */
+            border-top-color: #d0d0d0;
+            /* light gray (monochrome theme) */
             animation: spin 1s linear infinite;
         }
 
@@ -34,8 +68,8 @@
 
         /* Style for the audio player in dark mode */
         audio::-webkit-media-controls-panel {
-            background-color: #374151;
-            /* gray-700 */
+            background-color: #161616;
+            /* near-black panel (monochrome theme) */
         }
 
         audio::-webkit-media-controls-play-button,
@@ -48,9 +82,9 @@
         }
 
         kbd {
-            background-color: #374151;
+            background-color: #1f1f1f;
             border-radius: 3px;
-            border: 1px solid #4b5563;
+            border: 1px solid #333333;
             padding: 2px 4px;
             font-size: 0.8em;
             margin-left: 8px;
