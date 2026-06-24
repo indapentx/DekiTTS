@@ -544,11 +544,14 @@
 
         // App State
         let allRows = [];
+        // Master list of items for EVERY mode (sentence/word/prompted-word). Generated
+        // audio lives on these objects, so it is never lost when switching modes.
+        let allQueueItems = [];
+        // generationQueue is just the active-mode view (a filtered slice of allQueueItems).
         let generationQueue = [];
         let currentQueueIndex = 0;
-        // Per-mode snapshots of { queue, index } so switching modes preserves takes,
-        // review status, and position instead of rebuilding from scratch.
-        let queuesByMode = {};
+        // Remembers the review position per mode so switching back returns where you were.
+        const modeViewIndex = { sentences: 0, words: 0, promptedWords: 0 };
         let reviewAdvanceDirection = 1;
         let consecutivePreviousMoves = 0;
         const REVERSE_REVIEW_TRIGGER_STEPS = 2;
@@ -1110,20 +1113,20 @@
             };
         }
 
-        function buildGenerationQueue(rows) {
+        function buildQueueItemsForMode(rows, mode) {
             if (!Array.isArray(rows) || rows.length === 0) return [];
 
             const items = [];
             rows.forEach((row, rowIndex) => {
                 if (!row) return;
 
-                if (generationMode === 'words' || generationMode === 'promptedWords') {
+                if (mode === 'words' || mode === 'promptedWords') {
                     const wordVariants = getRowWordVariants(row);
                     wordVariants.forEach((wordText, wordIndex) => {
                         items.push(createQueueItem(
                             row,
                             rowIndex,
-                            generationMode === 'promptedWords' ? 'prompted-word' : 'word',
+                            mode === 'promptedWords' ? 'prompted-word' : 'word',
                             wordText,
                             {
                                 wordVariantPosition: wordIndex + 1,
@@ -1134,7 +1137,7 @@
                     });
                 }
 
-                if (generationMode === 'sentences') {
+                if (mode === 'sentences') {
                     const sentences = getSentenceList(row);
                     sentences.forEach((sentence, sentenceIndex) => {
                         const trimmed = typeof sentence === 'string' ? sentence.trim() : '';
@@ -1148,6 +1151,27 @@
             });
 
             return items;
+        }
+
+        // Build items for every mode up front so audio generated in one mode survives
+        // switching to another. The active mode is just a filtered view (rebuildActiveQueue).
+        function buildAllQueueItems(rows) {
+            return [
+                ...buildQueueItemsForMode(rows, 'sentences'),
+                ...buildQueueItemsForMode(rows, 'words'),
+                ...buildQueueItemsForMode(rows, 'promptedWords')
+            ];
+        }
+
+        function getModeContentType(mode = generationMode) {
+            if (mode === 'sentences') return 'sentence';
+            if (mode === 'promptedWords') return 'prompted-word';
+            return 'word';
+        }
+
+        function rebuildActiveQueue() {
+            const contentType = getModeContentType();
+            generationQueue = allQueueItems.filter(item => item && item.contentType === contentType);
         }
 
         function clampCurrentQueueIndex() {
@@ -1757,6 +1781,46 @@
             return flaggedRows;
         }
 
+        // --- All-mode getters: span every mode so generated audio is retained and
+        // exported together, no matter which mode is currently active. ---
+        function getAllReadyItems() {
+            return allQueueItems.filter(item => item && hasAudioVersions(item) && item.reviewStatus !== 'flagged');
+        }
+
+        function getAllApprovedAudioItems() {
+            return allQueueItems.filter(item => item && item.reviewStatus === 'approved' && hasApprovedAudio(item));
+        }
+
+        function getAllFlaggedItems() {
+            return allQueueItems.filter(item => item && item.reviewStatus === 'flagged');
+        }
+
+        function getAllFlaggedRows() {
+            const seenRowIndexes = new Set();
+            const flaggedRows = [];
+            getAllFlaggedItems().forEach(item => {
+                if (!item || seenRowIndexes.has(item.rowIndex)) return;
+                seenRowIndexes.add(item.rowIndex);
+                const row = allRows[item.rowIndex];
+                if (row) flaggedRows.push(row);
+            });
+            return flaggedRows;
+        }
+
+        // Generated/approved totals across all modes, for the Review Queue panel.
+        function getOverallAudioSummary() {
+            let generated = 0;
+            let approved = 0;
+            let flaggedWithAudio = 0;
+            allQueueItems.forEach(item => {
+                if (!item || !hasAudioVersions(item)) return;
+                generated += 1;
+                if (item.reviewStatus === 'flagged') flaggedWithAudio += 1;
+                if (item.reviewStatus === 'approved' && hasApprovedAudio(item)) approved += 1;
+            });
+            return { generated, approved, ready: Math.max(generated - flaggedWithAudio, 0) };
+        }
+
         function getSelectedAccountRemainingCredits() {
             if (!selectedAccountId) return null;
             const elements = accountElements.get(selectedAccountId);
@@ -1983,21 +2047,28 @@
                 reviewHintEl.textContent = `${reviewHintEl.textContent} Flagged Only session: ${sessionCount} card${sessionCount === 1 ? '' : 's'} locked in.`;
             }
 
-            const flaggedRowCount = getFlaggedRows().length;
+            // Totals across every mode — generated audio is retained when switching
+            // modes and all of it goes into the exports.
+            const overall = getOverallAudioSummary();
+            const allFlaggedRowCount = getAllFlaggedRows().length;
+            if (overall.generated > summary.generated) {
+                reviewHintEl.textContent = `${reviewHintEl.textContent} Across all modes: ${overall.generated} generated · ${overall.approved} approved — every mode is kept and included in exports.`;
+            }
+
             const approvableCount = getApprovableItems().length;
             const playableCount = generationQueue.filter(
                 item => item && hasAudioVersions(item) && item.reviewStatus !== 'flagged'
             ).length;
-            zipCount.textContent = summary.ready;
-            approvedZipCount.textContent = summary.approved;
-            flaggedTxtCount.textContent = flaggedRowCount;
+            zipCount.textContent = overall.ready;
+            approvedZipCount.textContent = overall.approved;
+            flaggedTxtCount.textContent = allFlaggedRowCount;
             regenerateFlaggedCount.textContent = summary.flagged;
             approveAllCount.textContent = approvableCount;
 
             setButtonDisabled(approveAllBtn, controlsLocked || approvableCount === 0);
-            setButtonDisabled(downloadZipBtn, controlsLocked || summary.ready === 0);
-            setButtonDisabled(downloadApprovedBtn, controlsLocked || summary.approved === 0);
-            setButtonDisabled(downloadFlaggedTxtBtn, controlsLocked || flaggedRowCount === 0);
+            setButtonDisabled(downloadZipBtn, controlsLocked || overall.ready === 0);
+            setButtonDisabled(downloadApprovedBtn, controlsLocked || overall.approved === 0);
+            setButtonDisabled(downloadFlaggedTxtBtn, controlsLocked || allFlaggedRowCount === 0);
             setButtonDisabled(regenerateFlaggedBtn, controlsLocked || summary.flagged === 0);
             setButtonDisabled(autoGenerateBtn, Boolean(loadingButtonKey) || isAutoPlaying || isAutoPlayPaused || (!isAutoGenerating && summary.total === 0));
             setButtonDisabled(playAllBtn, Boolean(loadingButtonKey) || isAutoGenerating || (!(isAutoPlaying || isAutoPlayPaused) && playableCount === 0));
@@ -2519,9 +2590,8 @@
             const { value } = event.target;
             if (!value || value === generationMode) return;
 
-            // Stash the queue/position of the mode we're leaving so returning to it
-            // restores its takes and progress instead of starting over.
-            queuesByMode[generationMode] = { queue: generationQueue, index: currentQueueIndex };
+            // Remember where we were in the mode we're leaving.
+            modeViewIndex[generationMode] = currentQueueIndex;
 
             generationMode = value;
             syncTtsModelToGenerationMode(generationMode);
@@ -2531,14 +2601,10 @@
             clearAudioPlayer();
             setLoadingState(false);
 
-            const cachedQueue = queuesByMode[generationMode];
-            if (cachedQueue) {
-                generationQueue = cachedQueue.queue;
-                currentQueueIndex = cachedQueue.index;
-            } else {
-                generationQueue = buildGenerationQueue(allRows);
-                currentQueueIndex = 0;
-            }
+            // Switch the view only — the items (and their generated audio) stay in
+            // allQueueItems, so nothing is lost when moving between modes.
+            rebuildActiveQueue();
+            currentQueueIndex = modeViewIndex[generationMode] || 0;
             clampCurrentQueueIndex();
             updateUIForCurrentItem();
 
@@ -2621,8 +2687,9 @@
             }
 
             allRows = combinedRows;
-            queuesByMode = {};
-            generationQueue = buildGenerationQueue(allRows);
+            allQueueItems = buildAllQueueItems(allRows);
+            modeViewIndex.sentences = modeViewIndex.words = modeViewIndex.promptedWords = 0;
+            rebuildActiveQueue();
             currentQueueIndex = 0;
             resetReviewAdvanceDirection();
             resetFlaggedOnlyMode();
@@ -3373,7 +3440,7 @@
 
         async function downloadReadyZip() {
             await downloadItemsAsZip(
-                getReadyItems(),
+                getAllReadyItems(),
                 'anki_audio_files.zip',
                 'No ready audio files to download.',
                 'Ready ZIP downloaded successfully!'
@@ -3382,7 +3449,7 @@
 
         async function downloadApprovedZip() {
             await downloadItemsAsZip(
-                getApprovedAudioItems(),
+                getAllApprovedAudioItems(),
                 'anki_approved_audio_files.zip',
                 'No approved audio files to download.',
                 'Approved ZIP downloaded successfully!',
@@ -3391,7 +3458,7 @@
         }
 
         async function downloadFlaggedTxt() {
-            const flaggedRows = getFlaggedRows();
+            const flaggedRows = getAllFlaggedRows();
             if (!flaggedRows.length) {
                 updateStatus('No flagged cards available to download.', 'error');
                 return;
