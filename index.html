@@ -96,116 +96,67 @@
 
     <div class="w-full max-w-4xl bg-gray-800 rounded-2xl shadow-2xl border border-gray-700 p-6 md:p-8 space-y-6">
 
-        <!-- Header -->
-        <div class="text-center">
-            <h1 class="text-3xl md:text-4xl font-bold text-white">Anki Audio Generator</h1>
-            <p class="text-gray-400 mt-2">Generate TTS for your flashcard sentences using your preferred ElevenLabs
-                model.</p>
-        </div>
-
         <!-- Configuration Section -->
-        <div class="p-6 bg-gray-900/50 rounded-xl border border-gray-700">
+        <div>
             <div class="text-center">
                 <label for="fileInput" class="block text-sm font-medium text-gray-400 mb-2">1. Select your Anki Export
                     File (.txt or .tsv)</label>
                 <input type="file" id="fileInput" accept=".txt,.tsv,text/plain,text/tab-separated-values" multiple
                     class="w-full max-w-sm mx-auto text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:font-semibold file:bg-indigo-500/10 file:text-indigo-400 hover:file:bg-indigo-500/20 file:border-gray-600">
             </div>
-            <div class="mt-4">
-                <div class="text-center">
-                    <span class="block text-sm font-medium text-gray-400 mb-2">2. Choose a Voice Mode</span>
-                    <p class="text-xs text-gray-500">Pick a mode below. Voice IDs are fixed for each language.</p>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="flex items-start space-x-3 bg-gray-900/60 p-4 rounded-lg border border-gray-700">
-                        <input type="radio" name="voiceMode" id="voiceModeA" value="voiceA"
-                            class="mt-1.5 h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500" checked>
-                        <div class="flex-1 text-left">
-                            <label for="voiceModeA" class="text-sm font-semibold text-gray-200">Deutsch</label>
-                            <p class="text-xs text-gray-400 mb-2">Default German voice used so far.</p>
-                            <p class="text-xs text-gray-500">Voice ID:
-                                <span class="font-mono text-gray-400">FOfJ2PMgU6HOGbNYnzto</span>
-                            </p>
-                        </div>
-                    </div>
-                    <div class="flex items-start space-x-3 bg-gray-900/60 p-4 rounded-lg border border-gray-700">
-                        <input type="radio" name="voiceMode" id="voiceModeB" value="voiceB"
-                            class="mt-1.5 h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500">
-                        <div class="flex-1 text-left">
-                            <label for="voiceModeB" class="text-sm font-semibold text-gray-200">Englisch</label>
-                            <p class="text-xs text-gray-400 mb-2">Use this when you want the English voice.</p>
-                            <p class="text-xs text-gray-500">Voice ID:
-                                <span class="font-mono text-gray-400">XrExE9yKIg1WjnnlVkGX</span>
-                            </p>
-                        </div>
-                    </div>
-                </div>
+            <div class="mt-4 text-center">
+                <span class="block text-sm font-medium text-gray-400 mb-2">2. Voice</span>
+                <p class="text-sm font-semibold text-gray-200">Englisch</p>
+                <p class="text-xs text-gray-500">Voice ID:
+                    <span class="font-mono text-gray-400">SAz9YHcvj6GT2YYXdXww</span></p>
             </div>
             <div class="mt-6">
                 <div class="text-center">
-                    <span class="block text-sm font-medium text-gray-400 mb-2">3. Choose What to Generate</span>
-                    <p class="text-xs text-gray-500">Switch between example sentences, single-word pronunciations, or a
-                        prompted word format.</p>
+                    <span class="block text-sm font-medium text-gray-400 mb-2">3. What to Generate</span>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <label for="generationModeSentences"
-                        class="flex items-start space-x-3 bg-gray-900/60 p-4 rounded-lg border border-gray-700 cursor-pointer">
+                        class="flex items-center space-x-3 cursor-pointer">
                         <input type="radio" name="generationMode" id="generationModeSentences" value="sentences"
-                            class="mt-1.5 h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500" checked>
-                        <div>
-                            <p class="text-sm font-semibold text-gray-200">Example Sentences</p>
-                            <p class="text-xs text-gray-400">Generate audio for the sentence field (fourth column with
-                                &lt;br&gt; separated examples).</p>
-                        </div>
+                            class="h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500" checked>
+                        <span class="text-sm font-semibold text-gray-200">Example Sentences</span>
                     </label>
                     <label for="generationModeWords"
-                        class="flex items-start space-x-3 bg-gray-900/60 p-4 rounded-lg border border-gray-700 cursor-pointer">
+                        class="flex items-center space-x-3 cursor-pointer">
                         <input type="radio" name="generationMode" id="generationModeWords" value="words"
-                            class="mt-1.5 h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500">
-                        <div>
-                            <p class="text-sm font-semibold text-gray-200">Words Only</p>
-                            <p class="text-xs text-gray-400">Generate audio for the vocabulary term (second column) with
-                                one clip per card.</p>
-                        </div>
+                            class="h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500">
+                        <span class="text-sm font-semibold text-gray-200">Words Only</span>
                     </label>
                     <label for="generationModePromptedWords"
-                        class="flex items-start space-x-3 bg-gray-900/60 p-4 rounded-lg border border-gray-700 cursor-pointer">
+                        class="flex items-center space-x-3 cursor-pointer">
                         <input type="radio" name="generationMode" id="generationModePromptedWords" value="promptedWords"
-                            class="mt-1.5 h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500">
-                        <div>
-                            <p class="text-sm font-semibold text-gray-200">Prompted Words</p>
-                            <p class="text-xs text-gray-400">Generate one clip per vocabulary term using the prompt
-                                <span class="font-mono text-gray-300">Das Wort ist... &lt;word&gt;.</span></p>
-                        </div>
+                            class="h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500">
+                        <span class="text-sm font-semibold text-gray-200">Prompted Words</span>
                     </label>
                 </div>
             </div>
             <div class="mt-6">
                 <div class="text-center">
-                    <span class="block text-sm font-medium text-gray-400 mb-2">4. Choose a TTS Model</span>
-                    <p class="text-xs text-gray-500">Auto-selected from step 3 until you manually change the model.</p>
+                    <span class="block text-sm font-medium text-gray-400 mb-2">4. TTS Model</span>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <label for="modelModeV2"
-                        class="flex items-start space-x-3 bg-gray-900/60 p-4 rounded-lg border border-gray-700 cursor-pointer">
+                        class="flex items-start space-x-3 cursor-pointer">
                         <input type="radio" name="modelMode" id="modelModeV2" value="eleven_multilingual_v2"
                             class="mt-1.5 h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500">
                         <div>
                             <p class="text-sm font-semibold text-gray-200">Multilingual v2 (Stable)</p>
-                            <p class="text-xs text-gray-400 mb-2">Current production-ready model from ElevenLabs.</p>
                             <p class="text-xs text-gray-500">Model ID:
                                 <span class="font-mono text-gray-400">eleven_multilingual_v2</span>
                             </p>
                         </div>
                     </label>
                     <label for="modelModeV3"
-                        class="flex items-start space-x-3 bg-gray-900/60 p-4 rounded-lg border border-gray-700 cursor-pointer">
+                        class="flex items-start space-x-3 cursor-pointer">
                         <input type="radio" name="modelMode" id="modelModeV3" value="eleven_v3"
                             class="mt-1.5 h-4 w-4 text-indigo-500 border-gray-600 focus:ring-indigo-500" checked>
                         <div>
                             <p class="text-sm font-semibold text-gray-200">Eleven v3 Alpha (Latest)</p>
-                            <p class="text-xs text-gray-400 mb-2">Experimental alpha release with the newest upgrades.
-                            </p>
                             <p class="text-xs text-gray-500">Model ID:
                                 <span class="font-mono text-gray-400">eleven_v3</span>
                             </p>
@@ -214,14 +165,14 @@
                 </div>
             </div>
             <div class="mt-6">
-                <label class="block text-sm font-medium text-gray-400 mb-2 text-center">5. Choose an API Account</label>
-                <div class="bg-gray-900/60 p-4 rounded-lg border border-gray-700 space-y-3">
+                <label class="block text-sm font-medium text-gray-400 mb-2 text-center">5. API Account</label>
+                <div class="space-y-3">
                     <div id="accountList" class="space-y-3"></div>
                     <p id="accountMessage" class="text-xs text-center text-gray-500">Loading account balances...</p>
                 </div>
             </div>
             <div class="text-center mt-6">
-                <label class="block text-sm font-medium text-gray-400 mb-2">6. Start the Process</label>
+                <label class="block text-sm font-medium text-gray-400 mb-2">6. Start</label>
                 <button id="loadFileBtn"
                     class="w-full max-w-sm mx-auto bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-105">
                     Load File & Start<kbd>Q</kbd>
@@ -1540,8 +1491,7 @@
         }
 
         function getSelectedVoiceMode() {
-            const selectedRadio = document.querySelector('input[name="voiceMode"]:checked');
-            return selectedRadio ? selectedRadio.value : 'voiceA';
+            return 'voiceB';
         }
 
         function isEnglishModeSelected() {
