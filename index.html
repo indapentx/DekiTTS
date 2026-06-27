@@ -241,7 +241,6 @@
             <!-- Stage 1: Source Files -->
             <div id="stepFiles">
             <p class="seg-lab">Source Files</p>
-            <p id="stepMessage" class="text-xs text-gray-500 h-4 mb-1"></p>
             <input type="file" id="fileInput" accept=".txt,.tsv,text/plain,text/tab-separated-values" multiple class="hidden">
             <div id="fileDropZone" class="fp-zone">
                 <div class="fp-disc">
@@ -625,7 +624,6 @@
         const stepFilesEl = document.getElementById('stepFiles');
         const stepSettingsEl = document.getElementById('stepSettings');
         const stepAccountEl = document.getElementById('stepAccount');
-        const stepMessageEl = document.getElementById('stepMessage');
         const stepBackBtn = document.getElementById('stepBackBtn');
         const stepNextBtn = document.getElementById('stepNextBtn');
         const workspace = document.getElementById('workspace');
@@ -835,8 +833,6 @@
             stepAccountEl.classList.toggle('hidden', name !== 'account');
             workspace.classList.toggle('hidden', name !== 'workspace');
 
-            stepMessageEl.textContent = '';
-
             // Next is disabled on the final stage; Back on the first stage opens
             // the file dialog (handled in handleStepBackButton) rather than navigating.
             stepNextBtn.disabled = name === 'workspace';
@@ -850,7 +846,6 @@
             const index = STEPS.indexOf(currentStep);
             if (index < 0 || index >= STEPS.length - 1) return;
             if (currentStep === 'files' && !(Array.isArray(allRows) && allRows.length > 0)) {
-                stepMessageEl.textContent = 'Pick a file to continue.';
                 return;
             }
             goToStep(STEPS[index + 1]);
@@ -3009,7 +3004,6 @@
 
             if (allRows.length === 0) {
                 workspace.classList.add('hidden');
-                stepMessageEl.textContent = 'File is empty or could not be parsed.';
                 updateStatus('File is empty or could not be parsed.', 'error');
                 updateUIForCurrentItem();
                 return;
