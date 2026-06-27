@@ -166,6 +166,34 @@
         .b-bal { flex: none; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 5px; padding-left: 14px; min-width: 78px; }
         .bnum { font-size: 16px; font-weight: 700; color: #f2f2f2; line-height: 1.25; font-variant-numeric: tabular-nums; }
         .bchip { font-size: 10px; font-weight: 600; letter-spacing: .02em; color: #9a9a9a; background: #1b1b1b; border: 1px solid #2c2c2c; border-radius: 9999px; padding: 2px 8px; line-height: 1.35; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+        /* --- File picker --- */
+        .fp-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+        .fp-zone { position: relative; display: flex; flex-direction: column; align-items: center; gap: 13px; padding: 30px 24px; background: #0b0b0b; border: 1.5px dashed #2c2c2c; border-radius: 16px; cursor: pointer; text-align: center; transition: border-color .18s, background .18s; }
+        .fp-zone:hover { border-color: #3d3d3d; background: #0e0e0e; }
+        .fp-zone.drag { border-color: #6f6f6f; background: #161616; border-style: solid; }
+        .fp-disc { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #1b1b1b; border: 1px solid #2c2c2c; transition: background .18s, transform .18s; }
+        .fp-zone:hover .fp-disc { background: #232323; }
+        .fp-zone.drag .fp-disc { background: #2d2d2d; transform: translateY(-2px); }
+        .fp-arrow { stroke: #cfcfcf; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+        .fp-zone.drag .fp-arrow { stroke: #fff; }
+        .fp-title { font-size: 14.5px; font-weight: 600; color: #ededed; }
+        .fp-browse { color: #f5f5f5; text-decoration: underline; text-underline-offset: 2px; text-decoration-color: #555; }
+        .fp-sub { font-size: 11.5px; color: #5c5c5c; margin-top: 7px; }
+        .fp-bar { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #7a7a7a; margin: 0 2px 10px; }
+        .fp-bar b { color: #ededed; }
+        .fp-list { display: flex; flex-direction: column; gap: 8px; }
+        .fp-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 14px; background: #0e0e0e; border: 1px solid #232323; border-radius: 9999px; transition: border-color .16s, background .16s; }
+        .fp-row:hover { border-color: #3a3a3a; background: #151515; }
+        .fp-chip { flex: none; height: 24px; padding: 0 8px; border-radius: 9999px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; letter-spacing: .04em; color: #b3b3b3; background: #1b1b1b; border: 1px solid #2c2c2c; }
+        .fp-name { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 500; color: #ededed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .fp-rm { flex: none; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #6f6f6f; background: transparent; border: 1px solid transparent; cursor: pointer; transition: color .15s, background .15s, border-color .15s; }
+        .fp-rm:hover { color: #e8c4c4; background: #1d1414; border-color: #3a2424; }
+        .fp-rm svg { stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; fill: none; }
+        .fp-addw { display: flex; justify-content: center; margin-top: 10px; }
+        .fp-add { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: #9a9a9a; background: #0e0e0e; border: 1px solid #262626; border-radius: 9999px; padding: 8px 16px; cursor: pointer; transition: color .16s, border-color .16s, background .16s; }
+        .fp-add:hover { color: #ededed; border-color: #3a3a3a; background: #151515; }
+        .fp-add svg { stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; fill: none; }
     </style>
 <template id="__bundler_thumbnail" data-bg-color="#0a0a0a">
   <svg viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg">
@@ -200,9 +228,24 @@
 
         <!-- Configuration Section -->
         <div>
-            <div class="text-center">
-                <input type="file" id="fileInput" accept=".txt,.tsv,text/plain,text/tab-separated-values" multiple
-                    class="w-full max-w-sm mx-auto text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:font-semibold file:bg-indigo-500/10 file:text-indigo-400 hover:file:bg-indigo-500/20 file:border-gray-600">
+            <p class="seg-lab">Source Files</p>
+            <input type="file" id="fileInput" accept=".txt,.tsv,text/plain,text/tab-separated-values" multiple class="hidden">
+            <div id="fileDropZone" class="fp-zone">
+                <div class="fp-disc">
+                    <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path class="fp-arrow" d="M11 14.5V4M11 4L6.5 8.5M11 4l4.5 4.5M4 16.5v1.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1.5"/></svg>
+                </div>
+                <div>
+                    <div class="fp-title">Drop text files here, or <span class="fp-browse">browse</span></div>
+                    <div class="fp-sub fp-mono">.txt · .tsv — multiple allowed</div>
+                </div>
+            </div>
+            <div id="fileSelected" class="hidden">
+                <div id="fileList" class="fp-list"></div>
+                <div class="fp-addw">
+                    <button type="button" id="fileAddMoreBtn" class="fp-add">
+                        <svg width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 2.5v9M2.5 7h9"/></svg>Add more files
+                    </button>
+                </div>
             </div>
             <div class="mt-4">
                 <p class="seg-lab">Language</p>
@@ -561,6 +604,10 @@
 
         // DOM Elements
         const fileInput = document.getElementById('fileInput');
+        const fileDropZone = document.getElementById('fileDropZone');
+        const fileSelectedEl = document.getElementById('fileSelected');
+        const fileListEl = document.getElementById('fileList');
+        const fileAddMoreBtn = document.getElementById('fileAddMoreBtn');
         const loadFileBtn = document.getElementById('loadFileBtn');
         const workspace = document.getElementById('workspace');
         const progressCounter = document.getElementById('progressCounter');
@@ -614,6 +661,9 @@
 
         // App State
         let allRows = [];
+        // Files chosen in the redesigned picker — the single source of truth that is
+        // mirrored into fileInput.files so the existing load/parse flow is unchanged.
+        let pickerFiles = [];
         // Master list of items for EVERY mode (sentence/word/prompted-word). Generated
         // audio lives on these objects, so it is never lost when switching modes.
         let allQueueItems = [];
@@ -663,8 +713,105 @@
             outputFilename: { groupKey: '', total: 0, nextIndex: 0 }
         };
 
+        // --- File picker (drag-drop + selected list) ---
+        function fileExtLabel(name) {
+            const match = /\.([^.]+)$/.exec(name || '');
+            return ((match ? match[1] : '').slice(0, 4).toUpperCase()) || 'TXT';
+        }
+
+        function fileBaseName(name) {
+            return (name || '').replace(/\.[^.]+$/, '') || name || '';
+        }
+
+        function commitPickerFiles() {
+            // Mirror pickerFiles into the real input so handleFileLoad keeps working.
+            const transfer = new DataTransfer();
+            pickerFiles.forEach(file => transfer.items.add(file));
+            fileInput.files = transfer.files;
+            renderFilePicker();
+        }
+
+        function mergeIntoPicker(list) {
+            const incoming = Array.from(list || []);
+            if (incoming.length === 0) return;
+            const seen = new Set(pickerFiles.map(f => f.name + ':' + f.size));
+            incoming.forEach(file => {
+                const key = file.name + ':' + file.size;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    pickerFiles.push(file);
+                }
+            });
+            commitPickerFiles();
+        }
+
+        function removePickerFile(index) {
+            pickerFiles.splice(index, 1);
+            commitPickerFiles();
+        }
+
+        function renderFilePicker() {
+            const count = pickerFiles.length;
+            const hasFiles = count > 0;
+            fileDropZone.classList.toggle('hidden', hasFiles);
+            fileSelectedEl.classList.toggle('hidden', !hasFiles);
+            if (!hasFiles) {
+                fileListEl.innerHTML = '';
+                return;
+            }
+            fileListEl.innerHTML = pickerFiles.map((file, index) => `
+                <div class="fp-row">
+                    <span class="fp-chip fp-mono">${fileExtLabel(file.name)}</span>
+                    <span class="fp-name" title="${file.name.replace(/"/g, '&quot;')}">${fileBaseName(file.name)}</span>
+                    <button type="button" class="fp-rm" data-file-index="${index}" aria-label="Remove ${file.name.replace(/"/g, '&quot;')}">
+                        <svg width="13" height="13" viewBox="0 0 14 14"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7"/></svg>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function openFileBrowser() {
+            fileInput.click();
+        }
+
+        function handlePickerInputChange() {
+            // Native dialog returned files — append them (deduped) to the selection.
+            mergeIntoPicker(fileInput.files);
+        }
+
+        function handlePickerDragOver(event) {
+            event.preventDefault();
+            fileDropZone.classList.add('drag');
+        }
+
+        function handlePickerDragLeave(event) {
+            event.preventDefault();
+            fileDropZone.classList.remove('drag');
+        }
+
+        function handlePickerDrop(event) {
+            event.preventDefault();
+            fileDropZone.classList.remove('drag');
+            const dropped = event.dataTransfer && event.dataTransfer.files;
+            mergeIntoPicker(dropped);
+        }
+
+        function handleFileListClick(event) {
+            const removeBtn = event.target.closest('[data-file-index]');
+            if (!removeBtn) return;
+            removePickerFile(Number(removeBtn.dataset.fileIndex));
+        }
+
         // --- Event Listeners ---
         loadFileBtn.addEventListener('click', handleFileLoad);
+        fileDropZone.addEventListener('click', openFileBrowser);
+        fileDropZone.addEventListener('dragover', handlePickerDragOver);
+        fileDropZone.addEventListener('dragenter', handlePickerDragOver);
+        fileDropZone.addEventListener('dragleave', handlePickerDragLeave);
+        fileDropZone.addEventListener('drop', handlePickerDrop);
+        fileAddMoreBtn.addEventListener('click', openFileBrowser);
+        fileListEl.addEventListener('click', handleFileListClick);
+        fileInput.addEventListener('change', handlePickerInputChange);
         fileInput.addEventListener('change', handleShortcutFileSelection);
         previousBtn.addEventListener('click', moveToPreviousItem);
         generateBtn.addEventListener('click', () => processGeneration(false));
@@ -2507,6 +2654,10 @@
             window.setTimeout(() => {
                 if (fileInput.files && fileInput.files.length > 0) return;
                 shouldLoadFileAfterShortcutSelection = false;
+                // Dialog was cancelled — restore the input from the kept selection.
+                if (pickerFiles.length > 0) {
+                    commitPickerFiles();
+                }
             }, 0);
         }
 
@@ -3883,3 +4034,6 @@
 </body>
 
 </html>
+
+<style id="__om-edit-overrides">
+</style>
