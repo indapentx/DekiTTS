@@ -300,12 +300,6 @@
                     <p id="accountMessage" class="text-xs text-center text-gray-500">Loading account balances...</p>
                 </div>
             </div>
-            <div class="text-center mt-6">
-                <button id="loadFileBtn"
-                    class="w-full max-w-sm mx-auto bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-105">
-                    Load File & Start<kbd>Q</kbd>
-                </button>
-            </div>
         </div>
 
         <!-- Main Workspace -->
@@ -608,7 +602,6 @@
         const fileSelectedEl = document.getElementById('fileSelected');
         const fileListEl = document.getElementById('fileList');
         const fileAddMoreBtn = document.getElementById('fileAddMoreBtn');
-        const loadFileBtn = document.getElementById('loadFileBtn');
         const workspace = document.getElementById('workspace');
         const progressCounter = document.getElementById('progressCounter');
         const progressBar = document.getElementById('progressBar');
@@ -743,6 +736,8 @@
                 }
             });
             commitPickerFiles();
+            // Auto-load & start as soon as files are picked or dropped — no button needed.
+            void handleFileLoad();
         }
 
         function removePickerFile(index) {
@@ -803,7 +798,6 @@
         }
 
         // --- Event Listeners ---
-        loadFileBtn.addEventListener('click', handleFileLoad);
         fileDropZone.addEventListener('click', openFileBrowser);
         fileDropZone.addEventListener('dragover', handlePickerDragOver);
         fileDropZone.addEventListener('dragenter', handlePickerDragOver);
@@ -2677,9 +2671,10 @@
         }
 
         function handleShortcutFileSelection() {
+            // Loading now happens automatically in mergeIntoPicker on every file
+            // selection; just clear the shortcut flag so the cancel cleanup is a no-op.
             if (!shouldLoadFileAfterShortcutSelection) return;
             shouldLoadFileAfterShortcutSelection = false;
-            void handleFileLoad();
         }
 
         function handleKeyPress(event) {
