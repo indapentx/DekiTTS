@@ -222,21 +222,17 @@
 </template>
 </head>
 
-<body class="bg-gray-900 text-gray-300 flex items-center justify-center min-h-screen p-4">
+<body class="bg-gray-900 text-gray-300 flex items-start justify-center min-h-screen px-4 py-10 md:py-16">
 
     <div class="w-full max-w-4xl bg-gray-800 rounded-2xl shadow-2xl border border-gray-700 p-6 md:p-8 space-y-6">
 
         <!-- Configuration Section -->
         <div>
-            <!-- Stepper header -->
-            <div class="flex items-center justify-between gap-3 mb-4">
+            <!-- Stepper header (mobile only — desktop navigates with q/e) -->
+            <div class="flex items-center justify-between gap-3 mb-4 md:hidden">
                 <button type="button" id="stepBackBtn" class="fp-add">
                     <svg width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><path d="M8.5 2.5L4 7l4.5 4.5"/></svg>Back<kbd>Q</kbd>
                 </button>
-                <div class="text-center">
-                    <p id="stepIndicator" class="text-xs font-semibold text-gray-300">Step 1 of 4 · Source Files</p>
-                    <p id="stepMessage" class="text-xs text-gray-500 h-4"></p>
-                </div>
                 <button type="button" id="stepNextBtn" class="fp-add">
                     Next<kbd>E</kbd><svg width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><path d="M5.5 2.5L10 7l-4.5 4.5"/></svg>
                 </button>
@@ -245,6 +241,7 @@
             <!-- Stage 1: Source Files -->
             <div id="stepFiles">
             <p class="seg-lab">Source Files</p>
+            <p id="stepMessage" class="text-xs text-gray-500 h-4 mb-1"></p>
             <input type="file" id="fileInput" accept=".txt,.tsv,text/plain,text/tab-separated-values" multiple class="hidden">
             <div id="fileDropZone" class="fp-zone">
                 <div class="fp-disc">
@@ -628,7 +625,6 @@
         const stepFilesEl = document.getElementById('stepFiles');
         const stepSettingsEl = document.getElementById('stepSettings');
         const stepAccountEl = document.getElementById('stepAccount');
-        const stepIndicatorEl = document.getElementById('stepIndicator');
         const stepMessageEl = document.getElementById('stepMessage');
         const stepBackBtn = document.getElementById('stepBackBtn');
         const stepNextBtn = document.getElementById('stepNextBtn');
@@ -829,7 +825,6 @@
 
         // --- Setup wizard (stepper) ---
         const STEPS = ['files', 'settings', 'account', 'workspace'];
-        const STEP_LABELS = { files: 'Source Files', settings: 'Settings', account: 'Account', workspace: 'Review' };
         let currentStep = 'files';
 
         function goToStep(name) {
@@ -840,8 +835,6 @@
             stepAccountEl.classList.toggle('hidden', name !== 'account');
             workspace.classList.toggle('hidden', name !== 'workspace');
 
-            const stepNumber = STEPS.indexOf(name) + 1;
-            stepIndicatorEl.textContent = `Step ${stepNumber} of ${STEPS.length} · ${STEP_LABELS[name]}`;
             stepMessageEl.textContent = '';
 
             // Next is disabled on the final stage; Back on the first stage opens
