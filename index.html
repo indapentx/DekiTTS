@@ -339,6 +339,7 @@
                     <div class="text-right space-y-1">
                         <p id="creditTotal" class="text-xl font-bold text-indigo-400">0</p>
                         <p id="creditBreakdown" class="text-xs text-gray-500">0 characters from 0 words · 0 sentences</p>
+                        <p id="creditCurrentHint" class="text-xs text-gray-400">Current word: 0 characters.</p>
                         <p id="creditBalanceHint" class="text-xs text-gray-500">Select an account to compare balance.</p>
                         <p id="creditCardHint" class="text-xs text-gray-500">0 cards remaining.</p>
                     </div>
@@ -679,6 +680,7 @@
         const autoModeStatusEl = document.getElementById('autoModeStatus');
         const creditTotalEl = document.getElementById('creditTotal');
         const creditBreakdownEl = document.getElementById('creditBreakdown');
+        const creditCurrentHintEl = document.getElementById('creditCurrentHint');
         const creditBalanceHintEl = document.getElementById('creditBalanceHint');
         const creditCardHintEl = document.getElementById('creditCardHint');
 
@@ -2112,6 +2114,16 @@
 
             creditTotalEl.textContent = formatNumber(stats.totalChars);
             creditBreakdownEl.textContent = `${formatNumber(stats.wordChars)} chars from ${stats.totalWords} words · ${formatNumber(stats.sentenceChars)} chars from ${stats.totalSentences} sentences`;
+
+            const currentItem = getCurrentQueueItem();
+            const currentText = getGenerationTextForItem(currentItem);
+            if (!currentItem || !currentText) {
+                creditCurrentHintEl.textContent = 'Current word: no clip queued.';
+            } else if (hasAudioVersions(currentItem)) {
+                creditCurrentHintEl.textContent = `Current word: ${formatNumber(currentText.length)} characters (already generated).`;
+            } else {
+                creditCurrentHintEl.textContent = `Current word: ${formatNumber(currentText.length)} characters.`;
+            }
 
             if (remainingCards === 0) {
                 creditCardHintEl.textContent = generationQueue.length === 0
