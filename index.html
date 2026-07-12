@@ -873,6 +873,19 @@
             }
         }
 
+        // Picking the deciding option of a stage advances the wizard on its own,
+        // after a short beat so the selection animation is still visible. The
+        // guard keeps a pending advance from firing if the user already left
+        // the stage via q/e in the meantime.
+        let stepAutoAdvanceTimer = null;
+        function scheduleStepAutoAdvance(fromStep, delayMs = 350) {
+            if (currentStep !== fromStep) return;
+            clearTimeout(stepAutoAdvanceTimer);
+            stepAutoAdvanceTimer = setTimeout(() => {
+                if (currentStep === fromStep) stepForward();
+            }, delayMs);
+        }
+
         // --- Event Listeners ---
         fileDropZone.addEventListener('click', openFileBrowser);
         fileDropZone.addEventListener('dragover', handlePickerDragOver);
@@ -912,6 +925,10 @@
         window.addEventListener('blur', stopAllHeldShortcuts, true);
         generationModeRadios.forEach(radio => {
             radio.addEventListener('change', handleGenerationModeChange);
+            // Generation Mode is the deciding row of the settings stage — picking
+            // one (even the already-selected one) moves the wizard on. Language
+            // and Model picks keep the stage open.
+            radio.addEventListener('click', () => scheduleStepAutoAdvance('settings'));
         });
         modelModeRadios.forEach(radio => {
             radio.addEventListener('change', handleModelModeChange);
@@ -1115,6 +1132,7 @@
                     row.addEventListener('click', () => {
                         setSelectedAccount(account.id);
                         saveLastAccountId(account.id);
+                        scheduleStepAutoAdvance('account', 300);
                     });
                 }
             });
