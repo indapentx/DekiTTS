@@ -1317,6 +1317,23 @@
             return contentType === 'word' || contentType === 'prompted-word';
         }
 
+        function isWordGenerationMode(mode) {
+            return mode === 'words' || mode === 'promptedWords';
+        }
+
+        // Words and Prompted are parallel views of the same cards: each word item
+        // has a counterpart in the other mode, built from the same row and variant.
+        function getCounterpartWordItem(item) {
+            if (!item || !isWordContentType(item.contentType)) return null;
+            const counterpartType = item.contentType === 'word' ? 'prompted-word' : 'word';
+            return allQueueItems.find(candidate =>
+                candidate &&
+                candidate.contentType === counterpartType &&
+                candidate.rowIndex === item.rowIndex &&
+                candidate.wordVariantPosition === item.wordVariantPosition
+            ) || null;
+        }
+
         function buildPromptedWordText(text) {
             const normalized = (text || '').trim().replace(/[.!?]+$/, '');
             if (!normalized) return '';
@@ -2928,7 +2945,8 @@
             if (!value || value === generationMode) return;
 
             // Remember where we were in the mode we're leaving.
-            modeViewIndex[generationMode] = currentQueueIndex;
+            const previousMode = generationMode;
+            modeViewIndex[previousMode] = currentQueueIndex;
 
             generationMode = value;
             syncTtsModelToGenerationMode(generationMode);
@@ -2941,7 +2959,12 @@
             // Switch the view only — the items (and their generated audio) stay in
             // allQueueItems, so nothing is lost when moving between modes.
             rebuildActiveQueue();
-            currentQueueIndex = modeViewIndex[generationMode] || 0;
+            // Words and Prompted are parallel views of the same cards, so switching
+            // between them stays on the current card; any other switch restores the
+            // last position visited in the target mode.
+            if (!(isWordGenerationMode(previousMode) && isWordGenerationMode(generationMode))) {
+                currentQueueIndex = modeViewIndex[generationMode] || 0;
+            }
             clampCurrentQueueIndex();
             updateUIForCurrentItem();
 
@@ -3553,6 +3576,15 @@
             currentItem.reviewStatus = isFlagged
                 ? getReviewStatusAfterFlagClear(currentItem)
                 : 'flagged';
+
+            // A flag marks the card, not the clip, so it follows the card into
+            // the other word mode (Words ↔ Prompted).
+            const counterpartItem = getCounterpartWordItem(currentItem);
+            if (counterpartItem) {
+                counterpartItem.reviewStatus = isFlagged
+                    ? getReviewStatusAfterFlagClear(counterpartItem)
+                    : 'flagged';
+            }
 
             if (!silent) {
                 updateStatus(
