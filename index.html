@@ -4157,6 +4157,10 @@
         audioPlayer.addEventListener('play', () => scheduleShortcutFocusRelease(audioPlayer));
         audioPlayer.addEventListener('pause', () => scheduleShortcutFocusRelease(audioPlayer));
 
+        // Default playback volume one step (10%) below full; persists until the user
+        // adjusts the slider (HTMLMediaElement.volume survives src changes and load()).
+        audioPlayer.volume = 0.9;
+
         startBalanceAutoRefresh();
         syncTtsModelToGenerationMode();
         setAutoGenerateButtonState(false);
