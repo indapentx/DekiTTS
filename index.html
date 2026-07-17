@@ -853,9 +853,8 @@
         function stepForward() {
             const index = STEPS.indexOf(currentStep);
             if (index < 0 || index >= STEPS.length - 1) return;
-            if (currentStep === 'files' && !(Array.isArray(allRows) && allRows.length > 0)) {
-                return;
-            }
+            // No file required to move on — the user may just want to browse the
+            // settings/account stages (e.g. to check credit balances).
             goToStep(STEPS[index + 1]);
         }
 
