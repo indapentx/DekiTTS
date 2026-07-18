@@ -200,6 +200,12 @@
         .fp-add { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: #9a9a9a; background: #0e0e0e; border: 1px solid #262626; border-radius: 9999px; padding: 8px 16px; cursor: pointer; transition: color .16s, border-color .16s, background .16s; }
         .fp-add:hover { color: #ededed; border-color: #3a3a3a; background: #151515; }
         .fp-add svg { stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; fill: none; }
+        .fp-or { display: flex; align-items: center; gap: 12px; margin: 18px 2px 14px; color: #5c5c5c; font-size: 10.5px; font-weight: 600; letter-spacing: .13em; text-transform: uppercase; }
+        .fp-or::before, .fp-or::after { content: ""; flex: 1; height: 1px; background: #2c2c2c; }
+        .fp-text { width: 100%; background: #0b0b0b; border: 1.5px solid #2c2c2c; border-radius: 12px; padding: 12px 14px; color: #ededed; font-size: 14px; line-height: 1.5; font-family: inherit; resize: vertical; min-height: 84px; transition: border-color .18s; }
+        .fp-text:focus { outline: none; border-color: #6f6f6f; }
+        .fp-text::placeholder { color: #4a4a4a; }
+        .fp-hint { font-size: 11.5px; color: #5c5c5c; margin: 8px 2px 0; }
     </style>
 <template id="__bundler_thumbnail" data-bg-color="#0a0a0a">
   <svg viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg">
@@ -265,6 +271,9 @@
                     </button>
                 </div>
             </div>
+            <div class="fp-or">or type text</div>
+            <textarea id="manualTextInput" class="fp-text" rows="4" placeholder="Type text to generate — one clip per line"></textarea>
+            <p class="fp-hint">One clip per line. Spoken per the Generation Mode you pick next. No file needed — just type and continue.</p>
             </div>
             <!-- Stage 2: Settings -->
             <div id="stepSettings" class="hidden">
@@ -628,6 +637,7 @@
         const fileSelectedEl = document.getElementById('fileSelected');
         const fileListEl = document.getElementById('fileList');
         const fileAddMoreBtn = document.getElementById('fileAddMoreBtn');
+        const manualTextInput = document.getElementById('manualTextInput');
         const stepFilesEl = document.getElementById('stepFiles');
         const stepSettingsEl = document.getElementById('stepSettings');
         const stepAccountEl = document.getElementById('stepAccount');
@@ -686,6 +696,9 @@
 
         // App State
         let allRows = [];
+        // Last typed-text value turned into clips, so navigating back/forward through
+        // the wizard doesn't needlessly rebuild the queue (and wipe generated audio).
+        let lastIngestedManualText = null;
         // Files chosen in the redesigned picker — the single source of truth that is
         // mirrored into fileInput.files so the existing load/parse flow is unchanged.
         let pickerFiles = [];
@@ -853,8 +866,15 @@
         function stepForward() {
             const index = STEPS.indexOf(currentStep);
             if (index < 0 || index >= STEPS.length - 1) return;
-            // No file required to move on — the user may just want to browse the
-            // settings/account stages (e.g. to check credit balances).
+            // Leaving the files stage: if the user typed text (and it changed since the
+            // last time), turn it into clips. No file required — they may also just be
+            // browsing ahead to the settings/account stages (e.g. to check credits).
+            if (currentStep === 'files' && manualTextInput) {
+                const typed = manualTextInput.value.trim();
+                if (typed && typed !== lastIngestedManualText) {
+                    ingestManualText();
+                }
+            }
             goToStep(STEPS[index + 1]);
         }
 
@@ -3027,6 +3047,57 @@
             return rows;
         }
 
+        // Turn typed lines into rows. Each non-empty line is one clip; the same text
+        // fills both the word and sentence fields so it works in any generation mode.
+        function parseManualText(text) {
+            const rows = [];
+            (typeof text === 'string' ? text : '').split('\n').forEach(rawLine => {
+                const line = rawLine.trim();
+                if (!line) return;
+                rows.push({
+                    word: line,
+                    wordVariants: [line],
+                    sentences: [line],
+                    sourceName: 'Typed text',
+                    sourceFolder: '',
+                    originalLine: line
+                });
+            });
+            return rows;
+        }
+
+        // Shared tail used by both file loading and typed-text entry: swap in a new set
+        // of rows, rebuild the master queue, and reset transient review/auto state.
+        function applyLoadedRows(rows) {
+            allRows = Array.isArray(rows) ? rows : [];
+            allQueueItems = buildAllQueueItems(allRows);
+            modeViewIndex.sentences = modeViewIndex.words = modeViewIndex.promptedWords = 0;
+            rebuildActiveQueue();
+            currentQueueIndex = 0;
+            resetReviewAdvanceDirection();
+            resetFlaggedOnlyMode();
+            isAutoGenerating = false;
+            autoStopRequested = false;
+            resetAutoPlaySession();
+            setAutoGenerateButtonState(false);
+            setAutoModeMessage('Uses your selected voice, current TTS model, and generation mode, without auto-approving.');
+            setLoadingState(false);
+            clearAudioPlayer();
+            updateUIForCurrentItem();
+        }
+
+        // Build the queue from whatever is in the typed-text box. Returns true if it
+        // produced at least one clip. Called when advancing past the files stage.
+        function ingestManualText() {
+            const typed = manualTextInput ? manualTextInput.value : '';
+            const rows = parseManualText(typed);
+            if (rows.length === 0) return false;
+            applyLoadedRows(rows);
+            lastIngestedManualText = typed.trim();
+            updateStatus(`${rows.length} clip${rows.length === 1 ? '' : 's'} ready from typed text.`, 'success');
+            return true;
+        }
+
         async function handleFileLoad() {
             const files = Array.from(fileInput.files || []);
             if (files.length === 0) {
@@ -3045,31 +3116,18 @@
                 return;
             }
 
-            allRows = combinedRows;
-            allQueueItems = buildAllQueueItems(allRows);
-            modeViewIndex.sentences = modeViewIndex.words = modeViewIndex.promptedWords = 0;
-            rebuildActiveQueue();
-            currentQueueIndex = 0;
-            resetReviewAdvanceDirection();
-            resetFlaggedOnlyMode();
-            isAutoGenerating = false;
-            autoStopRequested = false;
-            resetAutoPlaySession();
-            setAutoGenerateButtonState(false);
-            setAutoModeMessage('Uses your selected voice, current TTS model, and generation mode, without auto-approving.');
-            setLoadingState(false);
-            clearAudioPlayer();
+            applyLoadedRows(combinedRows);
+            // A loaded file supersedes any typed text.
+            lastIngestedManualText = null;
 
             if (allRows.length === 0) {
                 workspace.classList.add('hidden');
                 updateStatus('File is empty or could not be parsed.', 'error');
-                updateUIForCurrentItem();
                 return;
             }
 
             // Files parsed — keep the queue ready but reveal the workspace only when
             // the wizard reaches it. Advance to the settings stage instead.
-            updateUIForCurrentItem();
             if (currentStep === 'files') {
                 goToStep('settings');
             }
